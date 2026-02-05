@@ -28,3 +28,21 @@ dev = [
     "pytest-cov>=7.0.0",
     "ruff>=0.15.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+]
+addopts = "-v"
+
+[tool.coverage.run]
+source = ["src/ml_translate"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]
