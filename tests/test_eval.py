@@ -3,7 +3,7 @@ import torch
 
 from ml_translate.data import Lang, MAX_LENGTH
 from ml_translate.model import EncoderRNN, AttnDecoderRNN
-from ml_translate.eval import evaluate
+from ml_translate.eval import evaluate, evaluate_bleu
 
 
 @pytest.fixture
@@ -83,3 +83,42 @@ class TestEvaluate:
         # Verify models are in eval mode
         assert not encoder.training
         assert not decoder.training
+
+
+class TestEvaluateBleu:
+    def test_evaluate_bleu_returns_float(self, eval_setup, device):
+        """Test that evaluate_bleu returns a float."""
+        encoder, decoder, input_lang, output_lang = eval_setup
+
+        pairs = [["je suis content", "i am happy"]]
+        bleu = evaluate_bleu(encoder, decoder, pairs, input_lang, output_lang, device)
+
+        assert isinstance(bleu, float)
+        assert 0 <= bleu <= 1
+
+    def test_evaluate_bleu_multiple_pairs(self, eval_setup, device):
+        """Test evaluate_bleu with multiple pairs."""
+        encoder, decoder, input_lang, output_lang = eval_setup
+
+        pairs = [
+            ["je suis content", "i am happy"],
+            ["il est grand", "he is tall"],
+        ]
+        bleu = evaluate_bleu(encoder, decoder, pairs, input_lang, output_lang, device)
+
+        assert isinstance(bleu, float)
+        assert 0 <= bleu <= 1
+
+    def test_evaluate_bleu_custom_max_n(self, eval_setup, device):
+        """Test evaluate_bleu with custom max_n."""
+        encoder, decoder, input_lang, output_lang = eval_setup
+
+        pairs = [["je suis content", "i am happy"]]
+
+        # BLEU-2 should work with shorter sentences
+        bleu = evaluate_bleu(
+            encoder, decoder, pairs, input_lang, output_lang, device, max_n=2
+        )
+
+        assert isinstance(bleu, float)
+        assert 0 <= bleu <= 1

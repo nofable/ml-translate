@@ -22,8 +22,8 @@ This document outlines optimization and extension opportunities for the neural m
 ### 1.3 BLEU Score Evaluation
 - **Location**: `src/ml_translate/eval.py`
 - **Current**: Only qualitative random sampling
-- **Change**: Add `calculate_bleu()` function and integrate into evaluation
-- **Status**: [ ] Not started
+- **Change**: Add `evaluate_bleu()` using torchtext.data.metrics.bleu_score
+- **Status**: [x] Complete
 
 ### 1.4 Early Stopping
 - **Location**: `src/ml_translate/train.py`
@@ -168,7 +168,7 @@ This document outlines optimization and extension opportunities for the neural m
 
 | Phase | Items | Completed | Status |
 |-------|-------|-----------|--------|
-| 1. Critical Foundation | 4 | 2 | In progress |
+| 1. Critical Foundation | 4 | 3 | In progress |
 | 2. Training Improvements | 4 | 0 | Not started |
 | 3. Embeddings & Architecture | 5 | 0 | Not started |
 | 4. Evaluation & Decoding | 3 | 0 | Not started |
