@@ -103,6 +103,44 @@ class TrainResult:
 
     train_losses: list[float] = field(default_factory=list)
     val_losses: list[float] = field(default_factory=list)
+    stopped_early: bool = False
+    best_val_loss: float | None = None
+
+
+class EarlyStopping:
+    """Stop training when validation loss stops improving."""
+
+    def __init__(self, patience: int = 5, min_delta: float = 0.0):
+        """
+        Args:
+            patience: Number of epochs to wait for improvement before stopping.
+            min_delta: Minimum change to qualify as an improvement.
+        """
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.best_loss: float | None = None
+
+    def __call__(self, val_loss: float) -> bool:
+        """Check if training should stop.
+
+        Args:
+            val_loss: Current validation loss.
+
+        Returns:
+            True if training should stop, False otherwise.
+        """
+        if self.best_loss is None:
+            self.best_loss = val_loss
+            return False
+
+        if val_loss < self.best_loss - self.min_delta:
+            self.best_loss = val_loss
+            self.counter = 0
+            return False
+
+        self.counter += 1
+        return self.counter >= self.patience
 
 
 def train(
@@ -114,6 +152,7 @@ def train(
     print_every: int = 100,
     plot_every: int = 100,
     val_dataloader: DataLoader | None = None,
+    early_stopping_patience: int | None = None,
 ) -> TrainResult:
     """Train the encoder-decoder model.
 
@@ -127,6 +166,8 @@ def train(
         plot_every: Record loss every N epochs.
         val_dataloader: Optional validation data loader. If provided,
             validation loss is computed after each epoch.
+        early_stopping_patience: If set, stop training after this many epochs
+            without validation loss improvement. Requires val_dataloader.
 
     Returns:
         TrainResult containing train and validation loss histories.
@@ -141,6 +182,10 @@ def train(
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
     decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate)
     criterion = nn.NLLLoss()
+
+    early_stopping = None
+    if early_stopping_patience is not None and val_dataloader is not None:
+        early_stopping = EarlyStopping(patience=early_stopping_patience)
 
     for epoch in range(1, n_epochs + 1):
         train_loss = train_epoch(
@@ -194,5 +239,16 @@ def train(
                 plot_val_loss_avg = plot_val_loss_total / plot_every
                 result.val_losses.append(plot_val_loss_avg)
                 plot_val_loss_total = 0.0
+
+        # Check early stopping
+        if early_stopping is not None and val_loss is not None:
+            if early_stopping(val_loss):
+                logger.info("Early stopping at epoch %d", epoch)
+                result.stopped_early = True
+                break
+
+    # Record best validation loss
+    if early_stopping is not None:
+        result.best_val_loss = early_stopping.best_loss
 
     return result

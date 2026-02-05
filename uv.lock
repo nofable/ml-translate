@@ -1186,6 +1186,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "numpy" },
+    { name = "pytorch-ignite" },
     { name = "scikit-learn" },
     { name = "torch" },
     { name = "torchtext" },
@@ -1205,6 +1206,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=2.4.2" },
+    { name = "pytorch-ignite", specifier = ">=0.5.3" },
     { name = "scikit-learn", specifier = ">=1.8.0" },
     { name = "torch", specifier = ">=2.10.0" },
     { name = "torchtext", specifier = ">=0.6.0" },
@@ -1818,6 +1820,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/29/bf/eca6a3d43db1dae7070f70e160ab20b807627ba953663ba07928cdd3dc58/python_json_logger-4.0.0.tar.gz", hash = "sha256:f58e68eb46e1faed27e0f574a55a0455eecd7b8a5b88b85a784519ba3cff047f", size = 17683, upload-time = "2025-10-06T04:15:18.984Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/51/e5/fecf13f06e5e5f67e8837d777d1bc43fac0ed2b77a676804df5c34744727/python_json_logger-4.0.0-py3-none-any.whl", hash = "sha256:af09c9daf6a813aa4cc7180395f50f2a9e5fa056034c9953aec92e381c5ba1e2", size = 15548, upload-time = "2025-10-06T04:15:17.553Z" },
+]
+
+[[package]]
+name = "pytorch-ignite"
+version = "0.5.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "torch" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5a/e5/7fe880b24de30b4eadc8d997ea8d3c4a8f507b1a34dcdced08d88f665ee3/pytorch_ignite-0.5.3.tar.gz", hash = "sha256:75c645f02fea66cc80c1998ade3f8402e0e6b6d73f3f4ad727c171f6e93874f4", size = 7506607, upload-time = "2025-10-16T00:42:05.142Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d2/ea/f6d5ee7433a5a1c1e4746e2a4e9a222eab545fdbe04b66754ffdab479ee8/pytorch_ignite-0.5.3-py3-none-any.whl", hash = "sha256:4ced7539c690a3b6f3116da7878389954dff787c33669f83b38221f3746bc63e", size = 343802, upload-time = "2025-10-16T00:41:55.738Z" },
 ]
 
 [[package]]

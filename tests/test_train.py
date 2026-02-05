@@ -6,7 +6,7 @@ from torch.utils.data import TensorDataset, DataLoader
 
 from ml_translate.data import MAX_LENGTH
 from ml_translate.model import EncoderRNN, DecoderRNN
-from ml_translate.train import train_epoch, validate_epoch, train, TrainResult
+from ml_translate.train import train_epoch, validate_epoch, train, TrainResult, EarlyStopping
 
 
 @pytest.fixture
@@ -219,3 +219,106 @@ class TestTrain:
         )
 
         assert len(result.val_losses) == len(result.train_losses)
+
+    @pytest.mark.slow
+    def test_train_early_stopping_records_best_loss(self, training_setup, small_dataloader):
+        """Test that early stopping records best validation loss."""
+        encoder, decoder, _, _, _ = training_setup
+
+        result = train(
+            small_dataloader,
+            encoder,
+            decoder,
+            n_epochs=4,
+            print_every=1,
+            plot_every=1,
+            val_dataloader=small_dataloader,
+            early_stopping_patience=10,  # High patience so it won't trigger
+        )
+
+        # Should record best validation loss even if not stopped early
+        assert result.best_val_loss is not None
+        assert result.best_val_loss > 0
+
+    @pytest.mark.slow
+    def test_train_early_stopping_disabled(self, training_setup, small_dataloader):
+        """Test that training runs full epochs without early stopping."""
+        encoder, decoder, _, _, _ = training_setup
+
+        result = train(
+            small_dataloader,
+            encoder,
+            decoder,
+            n_epochs=4,
+            print_every=1,
+            plot_every=1,
+            val_dataloader=small_dataloader,
+            early_stopping_patience=None,
+        )
+
+        assert len(result.train_losses) == 4
+        assert result.stopped_early is False
+
+
+class TestEarlyStopping:
+    def test_early_stopping_init(self):
+        """Test EarlyStopping initialization."""
+        es = EarlyStopping(patience=5, min_delta=0.01)
+        assert es.patience == 5
+        assert es.min_delta == 0.01
+        assert es.counter == 0
+        assert es.best_loss is None
+
+    def test_early_stopping_first_call(self):
+        """Test that first call sets best_loss and returns False."""
+        es = EarlyStopping(patience=3)
+        result = es(1.0)
+        assert result is False
+        assert es.best_loss == 1.0
+        assert es.counter == 0
+
+    def test_early_stopping_improvement(self):
+        """Test that improvement resets counter."""
+        es = EarlyStopping(patience=3)
+        es(1.0)
+        es(0.9)  # Improvement
+        assert es.best_loss == 0.9
+        assert es.counter == 0
+
+    def test_early_stopping_no_improvement(self):
+        """Test that no improvement increments counter."""
+        es = EarlyStopping(patience=3)
+        es(1.0)
+        es(1.1)  # No improvement
+        assert es.best_loss == 1.0
+        assert es.counter == 1
+
+    def test_early_stopping_triggers(self):
+        """Test that early stopping triggers after patience epochs."""
+        es = EarlyStopping(patience=3)
+        es(1.0)
+        assert es(1.1) is False  # counter=1
+        assert es(1.2) is False  # counter=2
+        assert es(1.3) is True   # counter=3, triggers
+
+    def test_early_stopping_min_delta(self):
+        """Test that min_delta controls improvement threshold."""
+        es = EarlyStopping(patience=3, min_delta=0.1)
+        es(1.0)
+        # 0.95 is not enough improvement (< min_delta)
+        es(0.95)
+        assert es.counter == 1
+        # 0.85 is enough improvement (> min_delta from 1.0)
+        es(0.85)
+        assert es.counter == 0
+        assert es.best_loss == 0.85
+
+    def test_early_stopping_reset_on_improvement(self):
+        """Test that counter resets when improvement occurs."""
+        es = EarlyStopping(patience=5)
+        es(1.0)
+        es(1.1)  # counter=1
+        es(1.2)  # counter=2
+        es(0.8)  # Improvement, counter=0
+        assert es.counter == 0
+        assert es.best_loss == 0.8

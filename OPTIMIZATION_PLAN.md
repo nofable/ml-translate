@@ -29,7 +29,7 @@ This document outlines optimization and extension opportunities for the neural m
 - **Location**: `src/ml_translate/train.py`
 - **Current**: Fixed number of epochs
 - **Change**: Add `EarlyStopping` class with patience parameter
-- **Status**: [ ] Not started
+- **Status**: [x] Complete
 
 ---
 
@@ -168,7 +168,7 @@ This document outlines optimization and extension opportunities for the neural m
 
 | Phase | Items | Completed | Status |
 |-------|-------|-----------|--------|
-| 1. Critical Foundation | 4 | 3 | In progress |
+| 1. Critical Foundation | 4 | 4 | Complete |
 | 2. Training Improvements | 4 | 0 | Not started |
 | 3. Embeddings & Architecture | 5 | 0 | Not started |
 | 4. Evaluation & Decoding | 3 | 0 | Not started |
