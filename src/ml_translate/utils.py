@@ -1,9 +1,9 @@
-import time
 import math
+import time
 from pathlib import Path
 
 
-def get_project_root():
+def get_project_root() -> Path:
     """Get project root (where pyproject.toml is)."""
     current = Path(__file__).resolve().parent
     while current != current.parent:
@@ -13,13 +13,13 @@ def get_project_root():
     raise RuntimeError("Could not find project root")
 
 
-def asMinutes(s):
+def asMinutes(s: float) -> str:
     m = math.floor(s / 60)
     s -= m * 60
     return f"{m} {s}"
 
 
-def timeSince(since, percent):
+def timeSince(since: float, percent: float) -> str:
     now = time.time()
     s = now - since
     es = s / (percent)

@@ -1,14 +1,22 @@
 import time
-from torch import nn
-from torch import optim
+
+from torch import nn, optim
+from torch.optim import Optimizer
+from torch.utils.data import DataLoader
+
+from ml_translate.model import EncoderRNN, DecoderRNN, AttnDecoderRNN
 from ml_translate.utils import timeSince
 
 
 def train_epoch(
-    dataloader, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion
-):
-
-    total_loss = 0
+    dataloader: DataLoader,
+    encoder: EncoderRNN,
+    decoder: DecoderRNN | AttnDecoderRNN,
+    encoder_optimizer: Optimizer,
+    decoder_optimizer: Optimizer,
+    criterion: nn.Module,
+) -> float:
+    total_loss = 0.0
     for data in dataloader:
         input_tensor, target_tensor = data
 
@@ -32,18 +40,18 @@ def train_epoch(
 
 
 def train(
-    train_dataloader,
-    encoder,
-    decoder,
-    n_epochs,
-    learning_rate=0.001,
-    print_every=100,
-    plot_every=100,
-):
+    train_dataloader: DataLoader,
+    encoder: EncoderRNN,
+    decoder: DecoderRNN | AttnDecoderRNN,
+    n_epochs: int,
+    learning_rate: float = 0.001,
+    print_every: int = 100,
+    plot_every: int = 100,
+) -> list[float]:
     start = time.time()
-    plot_losses = []
-    print_loss_total = 0  # Reset every print_every
-    plot_loss_total = 0  # Reset every plot_every
+    plot_losses: list[float] = []
+    print_loss_total = 0.0  # Reset every print_every
+    plot_loss_total = 0.0  # Reset every plot_every
 
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
     decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate)
@@ -63,7 +71,7 @@ def train(
 
         if epoch % print_every == 0:
             print_loss_avg = print_loss_total / print_every
-            print_loss_total = 0
+            print_loss_total = 0.0
             print(
                 f"{timeSince(start, epoch / n_epochs)} ({epoch} {epoch / n_epochs * 100}) {print_loss_avg}"
             )
@@ -71,6 +79,6 @@ def train(
         if epoch % plot_every == 0:
             plot_loss_avg = plot_loss_total / plot_every
             plot_losses.append(plot_loss_avg)
-            plot_loss_total = 0
+            plot_loss_total = 0.0
 
     return plot_losses

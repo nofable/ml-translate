@@ -1,9 +1,20 @@
-import torch
 import random
-from ml_translate.data import tensorFromSentence, EOS_token
+
+import torch
+from torch import Tensor
+
+from ml_translate.data import Lang, tensorFromSentence, EOS_token
+from ml_translate.model import EncoderRNN, DecoderRNN, AttnDecoderRNN
 
 
-def evaluate(encoder, decoder, sentence, input_lang, output_lang, device):
+def evaluate(
+    encoder: EncoderRNN,
+    decoder: DecoderRNN | AttnDecoderRNN,
+    sentence: str,
+    input_lang: Lang,
+    output_lang: Lang,
+    device: torch.device,
+) -> tuple[list[str], Tensor | None]:
     with torch.no_grad():
         input_tensor = tensorFromSentence(input_lang, sentence, device)
 
@@ -15,7 +26,7 @@ def evaluate(encoder, decoder, sentence, input_lang, output_lang, device):
         _, topi = decoder_outputs.topk(1)
         decoded_ids = topi.squeeze()
 
-        decoded_words = []
+        decoded_words: list[str] = []
         for idx in decoded_ids:
             if idx.item() == EOS_token:
                 decoded_words.append("<EOS>")
@@ -24,7 +35,15 @@ def evaluate(encoder, decoder, sentence, input_lang, output_lang, device):
     return decoded_words, decoder_attn
 
 
-def evaluateRandomly(encoder, decoder, input_lang, output_lang, pairs, device, n=10):
+def evaluateRandomly(
+    encoder: EncoderRNN,
+    decoder: DecoderRNN | AttnDecoderRNN,
+    input_lang: Lang,
+    output_lang: Lang,
+    pairs: list[list[str]],
+    device: torch.device,
+    n: int = 10,
+) -> None:
     for i in range(n):
         pair = random.choice(pairs)
         print(">", pair[0])

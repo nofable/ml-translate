@@ -1,15 +1,18 @@
 from __future__ import unicode_literals, print_function, division
-from io import open
-import unicodedata
+
 import re
-import torch
+import unicodedata
+
 import numpy as np
-from torch.utils.data import TensorDataset, DataLoader, RandomSampler
+import torch
+from torch import Tensor
+from torch.utils.data import DataLoader, RandomSampler, TensorDataset
+
 from ml_translate.utils import get_project_root
 
-MAX_LENGTH = 10
+MAX_LENGTH: int = 10
 
-eng_prefixes = (
+eng_prefixes: tuple[str, ...] = (
     "i am ",
     "i m ",
     "he is",
@@ -24,23 +27,23 @@ eng_prefixes = (
     "they re ",
 )
 
-SOS_token = 0
-EOS_token = 1
+SOS_token: int = 0
+EOS_token: int = 1
 
 
 class Lang:
-    def __init__(self, name):
+    def __init__(self, name: str) -> None:
         self.name = name
-        self.word2index = {}
-        self.word2count = {}
-        self.index2word = {0: "SOS", 1: "EOS"}
+        self.word2index: dict[str, int] = {}
+        self.word2count: dict[str, int] = {}
+        self.index2word: dict[int, str] = {0: "SOS", 1: "EOS"}
         self.n_words = 2  # Count SOS and EOS
 
-    def addSentence(self, sentence):
+    def addSentence(self, sentence: str) -> None:
         for word in sentence.split(" "):
             self.addWord(word)
 
-    def addWord(self, word):
+    def addWord(self, word: str) -> None:
         if word not in self.word2index:
             self.word2index[word] = self.n_words
             self.word2count[word] = 1
@@ -52,21 +55,23 @@ class Lang:
 
 # Turn a Unicode string to plain ASCII, thanks to
 # https://stackoverflow.com/a/518232/2809427
-def unicodeToAscii(s):
+def unicodeToAscii(s: str) -> str:
     return "".join(
         c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn"
     )
 
 
 # Lowercase, trim, and remove non-letter characters
-def normalizeString(s):
+def normalizeString(s: str) -> str:
     s = unicodeToAscii(s.lower().strip())
     s = re.sub(r"([.!?])", r" \1", s)
     s = re.sub(r"[^a-zA-Z!?]+", r" ", s)
     return s.strip()
 
 
-def readLangs(lang1, lang2, reverse=False):
+def readLangs(
+    lang1: str, lang2: str, reverse: bool = False
+) -> tuple[Lang, Lang, list[list[str]]]:
     print("Reading lines...")
     project_root = get_project_root()
 
@@ -79,7 +84,7 @@ def readLangs(lang1, lang2, reverse=False):
     )
 
     # Split every line into pairs and normalize
-    pairs = [[normalizeString(s) for s in l.split("\t")] for l in lines]
+    pairs = [[normalizeString(s) for s in line.split("\t")] for line in lines]
 
     # Reverse pairs, make Lang instances
     if reverse:
@@ -105,7 +110,7 @@ def readLangs(lang1, lang2, reverse=False):
     return input_lang, output_lang, pairs
 
 
-def filterPair(p):
+def filterPair(p: list[str]) -> bool:
     return (
         len(p[0].split(" ")) < MAX_LENGTH
         and len(p[1].split(" ")) < MAX_LENGTH
@@ -113,27 +118,31 @@ def filterPair(p):
     )
 
 
-def filterPairs(pairs):
+def filterPairs(pairs: list[list[str]]) -> list[list[str]]:
     return [pair for pair in pairs if filterPair(pair)]
 
 
-def indexesFromSentence(lang, sentence):
+def indexesFromSentence(lang: Lang, sentence: str) -> list[int]:
     return [lang.word2index[word] for word in sentence.split(" ")]
 
 
-def tensorFromSentence(lang, sentence, device):
+def tensorFromSentence(lang: Lang, sentence: str, device: torch.device) -> Tensor:
     indexes = indexesFromSentence(lang, sentence)
     indexes.append(EOS_token)
     return torch.tensor(indexes, dtype=torch.long, device=device).view(1, -1)
 
 
-def tensorsFromPair(pair, input_lang, output_lang, device):
+def tensorsFromPair(
+    pair: list[str], input_lang: Lang, output_lang: Lang, device: torch.device
+) -> tuple[Tensor, Tensor]:
     input_tensor = tensorFromSentence(input_lang, pair[0], device)
     target_tensor = tensorFromSentence(output_lang, pair[1], device)
     return (input_tensor, target_tensor)
 
 
-def get_dataloader(batch_size, device):
+def get_dataloader(
+    batch_size: int, device: torch.device
+) -> tuple[Lang, Lang, list[list[str]], DataLoader[tuple[Tensor, ...]]]:
     input_lang, output_lang, pairs = readLangs("eng", "fra", True)
 
     n = len(pairs)
