@@ -13,6 +13,12 @@ class TranslationConfig:
     hidden_size: int = 128
     batch_size: int = 32
 
+    # Data split ratios
+    train_ratio: float = 0.8
+    val_ratio: float = 0.1
+    test_ratio: float = 0.1
+    split_seed: int = 42
+
 
 # Default configuration instance
 default_config = TranslationConfig()

@@ -4,8 +4,9 @@ import unicodedata
 
 import numpy as np
 import torch
+from sklearn.model_selection import train_test_split
 from torch import Tensor
-from torch.utils.data import DataLoader, RandomSampler, TensorDataset
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 
 from ml_translate.config import default_config
 from ml_translate.utils import get_project_root
@@ -128,6 +129,55 @@ def filterPairs(pairs: list[list[str]]) -> list[list[str]]:
     return [pair for pair in pairs if filterPair(pair)]
 
 
+def split_pairs(
+    pairs: list[list[str]],
+    train_ratio: float = 0.8,
+    val_ratio: float = 0.1,
+    test_ratio: float = 0.1,
+    seed: int = 42,
+) -> tuple[list[list[str]], list[list[str]], list[list[str]]]:
+    """Split pairs into train, validation, and test sets using sklearn.
+
+    Args:
+        pairs: List of sentence pairs to split.
+        train_ratio: Fraction of data for training (default 0.8).
+        val_ratio: Fraction of data for validation (default 0.1).
+        test_ratio: Fraction of data for testing (default 0.1).
+        seed: Random seed for reproducibility.
+
+    Returns:
+        Tuple of (train_pairs, val_pairs, test_pairs).
+    """
+    if len(pairs) == 0:
+        return [], [], []
+
+    # First split: train vs (val + test)
+    train_pairs, temp_pairs = train_test_split(
+        pairs, train_size=train_ratio, random_state=seed
+    )
+
+    # Second split: val vs test
+    if val_ratio == 0:
+        val_pairs, test_pairs = [], temp_pairs
+    elif test_ratio == 0:
+        val_pairs, test_pairs = temp_pairs, []
+    else:
+        val_size = val_ratio / (val_ratio + test_ratio)
+        val_pairs, test_pairs = train_test_split(
+            temp_pairs, train_size=val_size, random_state=seed
+        )
+
+    logger.info(
+        "Split %d pairs into train=%d, val=%d, test=%d",
+        len(pairs),
+        len(train_pairs),
+        len(val_pairs),
+        len(test_pairs),
+    )
+
+    return train_pairs, val_pairs, test_pairs
+
+
 def indexesFromSentence(lang: Lang, sentence: str) -> list[int]:
     indexes: list[int] = []
     for word in sentence.split(" "):
@@ -153,15 +203,23 @@ def tensorsFromPair(
     return (input_tensor, target_tensor)
 
 
-def get_dataloader(
-    batch_size: int,
+def _create_tensor_dataset(
+    pairs: list[list[str]],
+    input_lang: Lang,
+    output_lang: Lang,
     device: torch.device,
-    lang1: str = "eng",
-    lang2: str = "fra",
-    reverse: bool = True,
-) -> tuple[Lang, Lang, list[list[str]], DataLoader[tuple[Tensor, ...]]]:
-    input_lang, output_lang, pairs = readLangs(lang1, lang2, reverse)
+) -> TensorDataset:
+    """Convert sentence pairs to a TensorDataset.
 
+    Args:
+        pairs: List of [input_sentence, output_sentence] pairs.
+        input_lang: Language object for input vocabulary.
+        output_lang: Language object for output vocabulary.
+        device: Device to place tensors on.
+
+    Returns:
+        TensorDataset with input and target tensors.
+    """
     n = len(pairs)
     input_ids = np.zeros((n, MAX_LENGTH), dtype=np.int32)
     target_ids = np.zeros((n, MAX_LENGTH), dtype=np.int32)
@@ -174,12 +232,74 @@ def get_dataloader(
         input_ids[idx, : len(inp_ids)] = inp_ids
         target_ids[idx, : len(tgt_ids)] = tgt_ids
 
-    train_data = TensorDataset(
-        torch.LongTensor(input_ids).to(device), torch.LongTensor(target_ids).to(device)
+    return TensorDataset(
+        torch.LongTensor(input_ids).to(device),
+        torch.LongTensor(target_ids).to(device),
     )
 
-    train_sampler = RandomSampler(train_data)
-    train_dataloader = DataLoader(
-        train_data, sampler=train_sampler, batch_size=batch_size
+
+def get_dataloaders(
+    batch_size: int,
+    device: torch.device,
+    lang1: str = "eng",
+    lang2: str = "fra",
+    reverse: bool = True,
+    train_ratio: float = 0.8,
+    val_ratio: float = 0.1,
+    test_ratio: float = 0.1,
+    seed: int = 42,
+) -> tuple[
+    Lang,
+    Lang,
+    DataLoader[tuple[Tensor, ...]],
+    DataLoader[tuple[Tensor, ...]],
+    DataLoader[tuple[Tensor, ...]],
+    list[list[str]],
+]:
+    """Load data and create train/val/test dataloaders.
+
+    Args:
+        batch_size: Number of samples per batch.
+        device: Device to place tensors on.
+        lang1: First language code (default "eng").
+        lang2: Second language code (default "fra").
+        reverse: If True, reverse translation direction (default True).
+        train_ratio: Fraction of data for training (default 0.8).
+        val_ratio: Fraction of data for validation (default 0.1).
+        test_ratio: Fraction of data for testing (default 0.1).
+        seed: Random seed for reproducible splits.
+
+    Returns:
+        Tuple of (input_lang, output_lang, train_loader, val_loader, test_loader, test_pairs).
+        test_pairs is included for use with evaluateRandomly().
+    """
+    input_lang, output_lang, pairs = readLangs(lang1, lang2, reverse)
+
+    # Split the data
+    train_pairs, val_pairs, test_pairs = split_pairs(
+        pairs, train_ratio, val_ratio, test_ratio, seed
     )
-    return input_lang, output_lang, pairs, train_dataloader
+
+    # Create datasets
+    train_data = _create_tensor_dataset(train_pairs, input_lang, output_lang, device)
+    val_data = _create_tensor_dataset(val_pairs, input_lang, output_lang, device)
+    test_data = _create_tensor_dataset(test_pairs, input_lang, output_lang, device)
+
+    # Create dataloaders
+    train_loader = DataLoader(
+        train_data,
+        sampler=RandomSampler(train_data),
+        batch_size=batch_size,
+    )
+    val_loader = DataLoader(
+        val_data,
+        sampler=SequentialSampler(val_data),
+        batch_size=batch_size,
+    )
+    test_loader = DataLoader(
+        test_data,
+        sampler=SequentialSampler(test_data),
+        batch_size=batch_size,
+    )
+
+    return input_lang, output_lang, train_loader, val_loader, test_loader, test_pairs

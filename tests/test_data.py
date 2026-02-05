@@ -1,5 +1,7 @@
 import torch
 
+import pytest
+
 from ml_translate.data import (
     Lang,
     EOS_token,
@@ -7,6 +9,7 @@ from ml_translate.data import (
     normalizeString,
     filterPair,
     filterPairs,
+    split_pairs,
     indexesFromSentence,
     tensorFromSentence,
 )
@@ -182,3 +185,84 @@ class TestTensorFromSentence:
         device = torch.device("cpu")
         tensor = tensorFromSentence(lang, "hello", device)
         assert tensor.device.type == "cpu"
+
+
+class TestSplitPairs:
+    def test_split_pairs_default_ratios(self):
+        """Test splitting with default 80/10/10 ratios."""
+        pairs = [[f"input{i}", f"output{i}"] for i in range(100)]
+        train, val, test = split_pairs(pairs)
+
+        assert len(train) == 80
+        assert len(val) == 10
+        assert len(test) == 10
+
+    def test_split_pairs_custom_ratios(self):
+        """Test splitting with custom ratios."""
+        pairs = [[f"input{i}", f"output{i}"] for i in range(100)]
+        train, val, test = split_pairs(pairs, train_ratio=0.7, val_ratio=0.2, test_ratio=0.1)
+
+        assert len(train) == 70
+        assert len(val) == 20
+        assert len(test) == 10
+
+    def test_split_pairs_no_overlap(self):
+        """Test that splits have no overlapping pairs."""
+        pairs = [[f"input{i}", f"output{i}"] for i in range(100)]
+        train, val, test = split_pairs(pairs)
+
+        train_set = {tuple(p) for p in train}
+        val_set = {tuple(p) for p in val}
+        test_set = {tuple(p) for p in test}
+
+        assert len(train_set & val_set) == 0
+        assert len(train_set & test_set) == 0
+        assert len(val_set & test_set) == 0
+
+    def test_split_pairs_all_pairs_included(self):
+        """Test that all original pairs are in one of the splits."""
+        pairs = [[f"input{i}", f"output{i}"] for i in range(100)]
+        train, val, test = split_pairs(pairs)
+
+        all_split_pairs = train + val + test
+        assert len(all_split_pairs) == len(pairs)
+
+        original_set = {tuple(p) for p in pairs}
+        split_set = {tuple(p) for p in all_split_pairs}
+        assert original_set == split_set
+
+    def test_split_pairs_reproducible(self):
+        """Test that same seed produces same split."""
+        pairs = [[f"input{i}", f"output{i}"] for i in range(100)]
+
+        train1, val1, test1 = split_pairs(pairs, seed=42)
+        train2, val2, test2 = split_pairs(pairs, seed=42)
+
+        assert train1 == train2
+        assert val1 == val2
+        assert test1 == test2
+
+    def test_split_pairs_different_seeds(self):
+        """Test that different seeds produce different splits."""
+        pairs = [[f"input{i}", f"output{i}"] for i in range(100)]
+
+        train1, _, _ = split_pairs(pairs, seed=42)
+        train2, _, _ = split_pairs(pairs, seed=123)
+
+        assert train1 != train2
+
+    def test_split_pairs_empty(self):
+        """Test splitting empty list."""
+        train, val, test = split_pairs([])
+        assert train == []
+        assert val == []
+        assert test == []
+
+    def test_split_pairs_no_validation(self):
+        """Test splitting with no validation set."""
+        pairs = [[f"input{i}", f"output{i}"] for i in range(100)]
+        train, val, test = split_pairs(pairs, train_ratio=0.8, val_ratio=0.0, test_ratio=0.2)
+
+        assert len(train) == 80
+        assert len(val) == 0
+        assert len(test) == 20
