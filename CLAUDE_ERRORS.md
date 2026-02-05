@@ -1,0 +1,4 @@
+- writing large code block with roll-your-own impl rather than using a third-party lib.
+  - eg. implemented bleu score from scratch rather than using `from torchtext.data.metrics import bleu_score`
+  - eg. implemented dataset split itself, rather than using sklearn's `train_test_split`
+- didn't add the `.coverage` file to `.gitignore`
