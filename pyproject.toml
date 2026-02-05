@@ -24,6 +24,7 @@ dev = [
     "ipykernel>=7.1.0",
     "jupyter>=1.1.1",
     "matplotlib>=3.10.8",
+    "mypy>=1.15.0",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
     "ruff>=0.15.0",
@@ -46,3 +47,8 @@ exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",
 ]
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true

@@ -1,3 +1,4 @@
+import logging
 import random
 
 import torch
@@ -5,6 +6,8 @@ from torch import Tensor
 
 from ml_translate.data import Lang, tensorFromSentence, EOS_token
 from ml_translate.model import EncoderRNN, DecoderRNN, AttnDecoderRNN
+
+logger = logging.getLogger(__name__)
 
 
 def evaluate(
@@ -28,10 +31,17 @@ def evaluate(
 
         decoded_words: list[str] = []
         for idx in decoded_ids:
-            if idx.item() == EOS_token:
+            idx_val = idx.item()
+            if idx_val == EOS_token:
                 decoded_words.append("<EOS>")
                 break
-            decoded_words.append(output_lang.index2word[idx.item()])
+            if idx_val not in output_lang.index2word:
+                logger.warning(
+                    "Unknown index %d not found in output vocabulary", idx_val
+                )
+                decoded_words.append("<UNK>")
+            else:
+                decoded_words.append(output_lang.index2word[idx_val])
     return decoded_words, decoder_attn
 
 
@@ -46,11 +56,11 @@ def evaluateRandomly(
 ) -> None:
     for i in range(n):
         pair = random.choice(pairs)
-        print(">", pair[0])
-        print("=", pair[1])
+        logger.info("> %s", pair[0])
+        logger.info("= %s", pair[1])
         output_words, _ = evaluate(
             encoder, decoder, pair[0], input_lang, output_lang, device
         )
         output_sentence = " ".join(output_words)
-        print("<", output_sentence)
-        print("")
+        logger.info("< %s", output_sentence)
+        logger.info("")

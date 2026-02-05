@@ -1,5 +1,4 @@
-from __future__ import unicode_literals, print_function, division
-
+import logging
 import re
 import unicodedata
 
@@ -8,9 +7,12 @@ import torch
 from torch import Tensor
 from torch.utils.data import DataLoader, RandomSampler, TensorDataset
 
+from ml_translate.config import default_config
 from ml_translate.utils import get_project_root
 
-MAX_LENGTH: int = 10
+logger = logging.getLogger(__name__)
+
+MAX_LENGTH: int = default_config.max_length
 
 eng_prefixes: tuple[str, ...] = (
     "i am ",
@@ -72,16 +74,20 @@ def normalizeString(s: str) -> str:
 def readLangs(
     lang1: str, lang2: str, reverse: bool = False
 ) -> tuple[Lang, Lang, list[list[str]]]:
-    print("Reading lines...")
+    logger.info("Reading lines...")
     project_root = get_project_root()
 
+    # Check if data file exists
+    data_path = project_root / f"data/{lang1}-{lang2}.txt"
+    if not data_path.exists():
+        raise FileNotFoundError(
+            f"Data file not found: {data_path}. "
+            f"Please ensure the {lang1}-{lang2}.txt file exists in the data directory."
+        )
+
     # Read the file and split into lines
-    lines = (
-        open(project_root / f"data/{lang1}-{lang2}.txt", encoding="utf-8")
-        .read()
-        .strip()
-        .split("\n")
-    )
+    with open(data_path, encoding="utf-8") as f:
+        lines = f.read().strip().split("\n")
 
     # Split every line into pairs and normalize
     pairs = [[normalizeString(s) for s in line.split("\t")] for line in lines]
@@ -96,16 +102,16 @@ def readLangs(
         output_lang = Lang(lang2)
 
     # Apply filtering and add sentences to the Lang objects
-    print(f"Read {len(pairs)} sentence pairs")
+    logger.info("Read %d sentence pairs", len(pairs))
     pairs = filterPairs(pairs)
-    print(f"Trimmed to {len(pairs)} sentence pairs")
-    print("Counting words...")
+    logger.info("Trimmed to %d sentence pairs", len(pairs))
+    logger.info("Counting words...")
     for pair in pairs:
         input_lang.addSentence(pair[0])
         output_lang.addSentence(pair[1])
-    print("Counted words:")
-    print(input_lang.name, input_lang.n_words)
-    print(output_lang.name, output_lang.n_words)
+    logger.info("Counted words:")
+    logger.info("%s: %d", input_lang.name, input_lang.n_words)
+    logger.info("%s: %d", output_lang.name, output_lang.n_words)
 
     return input_lang, output_lang, pairs
 
@@ -123,7 +129,14 @@ def filterPairs(pairs: list[list[str]]) -> list[list[str]]:
 
 
 def indexesFromSentence(lang: Lang, sentence: str) -> list[int]:
-    return [lang.word2index[word] for word in sentence.split(" ")]
+    indexes: list[int] = []
+    for word in sentence.split(" "):
+        if word not in lang.word2index:
+            raise ValueError(
+                f"Unknown word '{word}' not found in vocabulary for language '{lang.name}'"
+            )
+        indexes.append(lang.word2index[word])
+    return indexes
 
 
 def tensorFromSentence(lang: Lang, sentence: str, device: torch.device) -> Tensor:
@@ -141,9 +154,13 @@ def tensorsFromPair(
 
 
 def get_dataloader(
-    batch_size: int, device: torch.device
+    batch_size: int,
+    device: torch.device,
+    lang1: str = "eng",
+    lang2: str = "fra",
+    reverse: bool = True,
 ) -> tuple[Lang, Lang, list[list[str]], DataLoader[tuple[Tensor, ...]]]:
-    input_lang, output_lang, pairs = readLangs("eng", "fra", True)
+    input_lang, output_lang, pairs = readLangs(lang1, lang2, reverse)
 
     n = len(pairs)
     input_ids = np.zeros((n, MAX_LENGTH), dtype=np.int32)

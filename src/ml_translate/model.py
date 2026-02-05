@@ -1,15 +1,16 @@
-from __future__ import unicode_literals, print_function, division
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
+from ml_translate.config import default_config
 from ml_translate.data import SOS_token, MAX_LENGTH
 
 
 class EncoderRNN(nn.Module):
-    def __init__(self, input_size: int, hidden_size: int, dropout_p: float = 0.1):
+    def __init__(
+        self, input_size: int, hidden_size: int, dropout_p: float = default_config.dropout_p
+    ):
         super().__init__()
         self.hidden_size = hidden_size
 
@@ -62,10 +63,10 @@ class DecoderRNN(nn.Module):
                     -1
                 ).detach()  # detach from history as input
 
-        decoder_outputs = torch.cat(decoder_outputs, dim=1)
-        decoder_outputs = F.log_softmax(decoder_outputs, dim=-1)
+        decoder_outputs_cat = torch.cat(decoder_outputs, dim=1)
+        decoder_outputs_cat = F.log_softmax(decoder_outputs_cat, dim=-1)
         return (
-            decoder_outputs,
+            decoder_outputs_cat,
             decoder_hidden,
             None,
         )  # We return `None` for consistency in the training loop
@@ -100,7 +101,7 @@ class AttnDecoderRNN(nn.Module):
         self,
         hidden_size: int,
         output_size: int,
-        dropout_p: float = 0.1,
+        dropout_p: float = default_config.dropout_p,
         device: torch.device | None = None,
     ):
         super().__init__()

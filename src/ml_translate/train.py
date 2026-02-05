@@ -1,11 +1,15 @@
+import logging
 import time
 
 from torch import nn, optim
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 
+from ml_translate.config import default_config
 from ml_translate.model import EncoderRNN, DecoderRNN, AttnDecoderRNN
 from ml_translate.utils import timeSince
+
+logger = logging.getLogger(__name__)
 
 
 def train_epoch(
@@ -44,7 +48,7 @@ def train(
     encoder: EncoderRNN,
     decoder: DecoderRNN | AttnDecoderRNN,
     n_epochs: int,
-    learning_rate: float = 0.001,
+    learning_rate: float = default_config.learning_rate,
     print_every: int = 100,
     plot_every: int = 100,
 ) -> list[float]:
@@ -72,8 +76,12 @@ def train(
         if epoch % print_every == 0:
             print_loss_avg = print_loss_total / print_every
             print_loss_total = 0.0
-            print(
-                f"{timeSince(start, epoch / n_epochs)} ({epoch} {epoch / n_epochs * 100}) {print_loss_avg}"
+            logger.info(
+                "%s (%d %.0f%%) %.4f",
+                timeSince(start, epoch / n_epochs),
+                epoch,
+                epoch / n_epochs * 100,
+                print_loss_avg,
             )
 
         if epoch % plot_every == 0:
