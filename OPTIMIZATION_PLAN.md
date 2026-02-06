@@ -128,22 +128,23 @@ This document outlines optimization and extension opportunities for the neural m
 ### 5.1 Mixed Precision Training (AMP)
 - **Location**: `src/ml_translate/train.py`
 - **Current**: Full float32
-- **Change**: Add `autocast` and `GradScaler` for float16 on GPU
+- **Change**: Added `use_amp` and `device` parameters to `train()`, uses `autocast` and `GradScaler`
 - **Impact**: 2-3x speedup on GPU
-- **Status**: [ ] Not started
+- **Status**: [x] Complete
 
 ### 5.2 Dynamic Batching
-- **Location**: `src/ml_translate/data.py`
+- **Location**: `src/ml_translate/data.py`, `src/ml_translate/model.py`
 - **Current**: Fixed padding to MAX_LENGTH
-- **Change**: Add `LengthSampler` and `collate_variable_length_batch()`
+- **Change**: Added `TranslationDataset`, `collate_dynamic_batch()`, and `dynamic_batching` parameter.
+  Decoders now use target length during training, MAX_LENGTH during inference.
 - **Impact**: 20-30% faster training, 40-60% less memory
-- **Status**: [ ] Not started
+- **Status**: [x] Complete
 
 ### 5.3 Device Management
-- **Location**: New utility or `src/ml_translate/utils.py`
+- **Location**: `src/ml_translate/utils.py`
 - **Current**: Manual device handling
-- **Change**: Add `DeviceManager` class with auto-detection (CUDA/MPS/CPU)
-- **Status**: [ ] Not started
+- **Change**: Added `get_device()` function with auto-detection (CUDA > MPS > CPU)
+- **Status**: [x] Complete
 
 ---
 
@@ -172,7 +173,7 @@ This document outlines optimization and extension opportunities for the neural m
 | 2. Training Improvements | 4 | 2 (1 skipped) | In progress |
 | 3. Embeddings & Architecture | 5 | 1 | In progress |
 | 4. Evaluation & Decoding | 3 | 0 | Not started |
-| 5. Performance | 3 | 0 | Not started |
+| 5. Performance | 3 | 3 | Complete |
 | 6. Data Augmentation | 2 | 0 | Not started |
 
 ---

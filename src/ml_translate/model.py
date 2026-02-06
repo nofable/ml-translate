@@ -61,7 +61,10 @@ class DecoderRNN(nn.Module):
         decoder_hidden = encoder_hidden
         decoder_outputs = []
 
-        for i in range(MAX_LENGTH):
+        # Use target length during training, MAX_LENGTH during inference
+        max_len = target_tensor.size(1) if target_tensor is not None else MAX_LENGTH
+
+        for i in range(max_len):
             decoder_output, decoder_hidden = self.forward_step(
                 decoder_input, decoder_hidden
             )
@@ -144,7 +147,10 @@ class AttnDecoderRNN(nn.Module):
         decoder_outputs: list[Tensor] = []
         attentions: list[Tensor] = []
 
-        for i in range(MAX_LENGTH):
+        # Use target length during training, MAX_LENGTH during inference
+        max_len = target_tensor.size(1) if target_tensor is not None else MAX_LENGTH
+
+        for i in range(max_len):
             decoder_output, decoder_hidden, attn_weights = self.forward_step(
                 decoder_input, decoder_hidden, encoder_outputs
             )

@@ -104,24 +104,12 @@ class TestFilterPair:
         pair = [long_sentence, "i am happy"]
         assert filterPair(pair) is False
 
-    def test_filter_pair_wrong_prefix(self):
-        """Test that pairs without eng_prefixes fail."""
-        pair = ["bonjour", "hello world"]  # doesn't start with eng_prefixes
-        assert filterPair(pair) is False
-
-    def test_filter_pair_both_conditions(self):
-        """Test pair that fails both conditions."""
-        long_sentence = " ".join(["word"] * 15)
-        pair = [long_sentence, "hello world"]
-        assert filterPair(pair) is False
-
 
 class TestFilterPairs:
     def test_filter_pairs_mixed(self):
         """Test filtering a list of mixed pairs."""
         pairs = [
             ["bonjour", "i am happy"],  # valid
-            ["salut", "hello world"],  # invalid prefix
             ["hi", "he is tall"],  # valid
         ]
         filtered = filterPairs(pairs)
@@ -132,15 +120,6 @@ class TestFilterPairs:
     def test_filter_pairs_empty(self):
         """Test filtering an empty list."""
         assert filterPairs([]) == []
-
-    def test_filter_pairs_all_invalid(self):
-        """Test filtering when all pairs are invalid."""
-        pairs = [
-            ["test", "hello world"],
-            ["test", "goodbye world"],
-        ]
-        filtered = filterPairs(pairs)
-        assert len(filtered) == 0
 
 
 class TestIndexesFromSentence:
@@ -200,7 +179,9 @@ class TestSplitPairs:
     def test_split_pairs_custom_ratios(self):
         """Test splitting with custom ratios."""
         pairs = [[f"input{i}", f"output{i}"] for i in range(100)]
-        train, val, test = split_pairs(pairs, train_ratio=0.7, val_ratio=0.2, test_ratio=0.1)
+        train, val, test = split_pairs(
+            pairs, train_ratio=0.7, val_ratio=0.2, test_ratio=0.1
+        )
 
         assert len(train) == 70
         assert len(val) == 20
@@ -261,7 +242,9 @@ class TestSplitPairs:
     def test_split_pairs_no_validation(self):
         """Test splitting with no validation set."""
         pairs = [[f"input{i}", f"output{i}"] for i in range(100)]
-        train, val, test = split_pairs(pairs, train_ratio=0.8, val_ratio=0.0, test_ratio=0.2)
+        train, val, test = split_pairs(
+            pairs, train_ratio=0.8, val_ratio=0.0, test_ratio=0.2
+        )
 
         assert len(train) == 80
         assert len(val) == 0

@@ -18,4 +18,3 @@
     Want me to:
     - Remove the projection layer and require matching dimensions, or
     - Keep it simple and just use GloVe with hidden_size=100 (no projection needed)?
-

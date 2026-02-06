@@ -1,12 +1,20 @@
 import logging
 import re
 import unicodedata
+from typing import Callable
 
 import numpy as np
 import torch
 from sklearn.model_selection import train_test_split
 from torch import Tensor
-from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
+from torch.nn.utils.rnn import pad_sequence
+from torch.utils.data import (
+    DataLoader,
+    Dataset,
+    RandomSampler,
+    SequentialSampler,
+    TensorDataset,
+)
 
 from ml_translate.config import default_config
 from ml_translate.utils import get_project_root
@@ -119,9 +127,8 @@ def readLangs(
 
 def filterPair(p: list[str]) -> bool:
     return (
-        len(p[0].split(" ")) < MAX_LENGTH
-        and len(p[1].split(" ")) < MAX_LENGTH
-        and p[1].startswith(eng_prefixes)
+        len(p[0].split(" ")) < MAX_LENGTH and len(p[1].split(" ")) < MAX_LENGTH
+        # and p[1].startswith(eng_prefixes) # uncomment this line for faster training on cpu hardware
     )
 
 
@@ -203,6 +210,62 @@ def tensorsFromPair(
     return (input_tensor, target_tensor)
 
 
+class TranslationDataset(Dataset):
+    """Dataset that stores sentence pairs as token indices for dynamic batching."""
+
+    def __init__(
+        self,
+        pairs: list[list[str]],
+        input_lang: Lang,
+        output_lang: Lang,
+    ):
+        """
+        Args:
+            pairs: List of [input_sentence, output_sentence] pairs.
+            input_lang: Language object for input vocabulary.
+            output_lang: Language object for output vocabulary.
+        """
+        self.pairs = pairs
+        self.input_lang = input_lang
+        self.output_lang = output_lang
+
+    def __len__(self) -> int:
+        return len(self.pairs)
+
+    def __getitem__(self, idx: int) -> tuple[list[int], list[int]]:
+        inp, tgt = self.pairs[idx]
+        inp_ids = indexesFromSentence(self.input_lang, inp)
+        tgt_ids = indexesFromSentence(self.output_lang, tgt)
+        inp_ids.append(EOS_token)
+        tgt_ids.append(EOS_token)
+        return inp_ids, tgt_ids
+
+
+def collate_dynamic_batch(
+    batch: list[tuple[list[int], list[int]]], device: torch.device
+) -> tuple[Tensor, Tensor]:
+    """Collate function that pads sequences to the max length in the batch.
+
+    Args:
+        batch: List of (input_ids, target_ids) tuples.
+        device: Device to place tensors on.
+
+    Returns:
+        Tuple of (input_tensor, target_tensor) padded to batch max lengths.
+    """
+    input_seqs, target_seqs = zip(*batch)
+
+    # Convert to tensors
+    input_tensors = [torch.tensor(seq, dtype=torch.long) for seq in input_seqs]
+    target_tensors = [torch.tensor(seq, dtype=torch.long) for seq in target_seqs]
+
+    # Pad sequences to max length in batch (padding value = 0)
+    input_padded = pad_sequence(input_tensors, batch_first=True, padding_value=0)
+    target_padded = pad_sequence(target_tensors, batch_first=True, padding_value=0)
+
+    return input_padded.to(device), target_padded.to(device)
+
+
 def _create_tensor_dataset(
     pairs: list[list[str]],
     input_lang: Lang,
@@ -248,6 +311,7 @@ def get_dataloaders(
     val_ratio: float = 0.1,
     test_ratio: float = 0.1,
     seed: int = 42,
+    dynamic_batching: bool = False,
 ) -> tuple[
     Lang,
     Lang,
@@ -268,6 +332,8 @@ def get_dataloaders(
         val_ratio: Fraction of data for validation (default 0.1).
         test_ratio: Fraction of data for testing (default 0.1).
         seed: Random seed for reproducible splits.
+        dynamic_batching: If True, pad sequences to batch max length instead
+            of global MAX_LENGTH. Reduces memory and speeds up training.
 
     Returns:
         Tuple of (input_lang, output_lang, train_loader, val_loader, test_loader, test_pairs).
@@ -280,26 +346,54 @@ def get_dataloaders(
         pairs, train_ratio, val_ratio, test_ratio, seed
     )
 
-    # Create datasets
-    train_data = _create_tensor_dataset(train_pairs, input_lang, output_lang, device)
-    val_data = _create_tensor_dataset(val_pairs, input_lang, output_lang, device)
-    test_data = _create_tensor_dataset(test_pairs, input_lang, output_lang, device)
+    if dynamic_batching:
+        # Use dynamic batching with custom collate function
+        train_data = TranslationDataset(train_pairs, input_lang, output_lang)
+        val_data = TranslationDataset(val_pairs, input_lang, output_lang)
+        test_data = TranslationDataset(test_pairs, input_lang, output_lang)
 
-    # Create dataloaders
-    train_loader = DataLoader(
-        train_data,
-        sampler=RandomSampler(train_data),
-        batch_size=batch_size,
-    )
-    val_loader = DataLoader(
-        val_data,
-        sampler=SequentialSampler(val_data),
-        batch_size=batch_size,
-    )
-    test_loader = DataLoader(
-        test_data,
-        sampler=SequentialSampler(test_data),
-        batch_size=batch_size,
-    )
+        collate_fn: Callable = lambda batch: collate_dynamic_batch(batch, device)
+
+        train_loader = DataLoader(
+            train_data,
+            batch_size=batch_size,
+            shuffle=True,
+            collate_fn=collate_fn,
+        )
+        val_loader = DataLoader(
+            val_data,
+            batch_size=batch_size,
+            shuffle=False,
+            collate_fn=collate_fn,
+        )
+        test_loader = DataLoader(
+            test_data,
+            batch_size=batch_size,
+            shuffle=False,
+            collate_fn=collate_fn,
+        )
+    else:
+        # Use fixed padding to MAX_LENGTH (original behavior)
+        train_data = _create_tensor_dataset(
+            train_pairs, input_lang, output_lang, device
+        )
+        val_data = _create_tensor_dataset(val_pairs, input_lang, output_lang, device)
+        test_data = _create_tensor_dataset(test_pairs, input_lang, output_lang, device)
+
+        train_loader = DataLoader(
+            train_data,
+            sampler=RandomSampler(train_data),
+            batch_size=batch_size,
+        )
+        val_loader = DataLoader(
+            val_data,
+            sampler=SequentialSampler(val_data),
+            batch_size=batch_size,
+        )
+        test_loader = DataLoader(
+            test_data,
+            sampler=SequentialSampler(test_data),
+            batch_size=batch_size,
+        )
 
     return input_lang, output_lang, train_loader, val_loader, test_loader, test_pairs

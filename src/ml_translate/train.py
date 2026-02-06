@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 import torch
 from torch import nn, optim
+from torch.amp import GradScaler, autocast
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
@@ -23,6 +24,8 @@ def train_epoch(
     decoder_optimizer: Optimizer,
     criterion: nn.Module,
     max_grad_norm: float | None = None,
+    scaler: GradScaler | None = None,
+    device_type: str = "cpu",
 ) -> float:
     """Train for one epoch.
 
@@ -34,12 +37,16 @@ def train_epoch(
         decoder_optimizer: Optimizer for decoder.
         criterion: Loss function.
         max_grad_norm: If set, clip gradients to this max norm.
+        scaler: GradScaler for mixed precision training.
+        device_type: Device type for autocast ("cuda", "cpu", "mps").
 
     Returns:
         Average loss over the epoch.
     """
     encoder.train()
     decoder.train()
+
+    use_amp = scaler is not None
 
     total_loss = 0.0
     for data in dataloader:
@@ -48,20 +55,31 @@ def train_epoch(
         encoder_optimizer.zero_grad()
         decoder_optimizer.zero_grad()
 
-        encoder_outputs, encoder_hidden = encoder(input_tensor)
-        decoder_outputs, _, _ = decoder(encoder_outputs, encoder_hidden, target_tensor)
+        with autocast(device_type=device_type, enabled=use_amp):
+            encoder_outputs, encoder_hidden = encoder(input_tensor)
+            decoder_outputs, _, _ = decoder(encoder_outputs, encoder_hidden, target_tensor)
 
-        loss = criterion(
-            decoder_outputs.view(-1, decoder_outputs.size(-1)), target_tensor.view(-1)
-        )
-        loss.backward()
+            loss = criterion(
+                decoder_outputs.view(-1, decoder_outputs.size(-1)), target_tensor.view(-1)
+            )
 
-        if max_grad_norm is not None:
-            nn.utils.clip_grad_norm_(encoder.parameters(), max_grad_norm)
-            nn.utils.clip_grad_norm_(decoder.parameters(), max_grad_norm)
-
-        encoder_optimizer.step()
-        decoder_optimizer.step()
+        if use_amp:
+            scaler.scale(loss).backward()
+            if max_grad_norm is not None:
+                scaler.unscale_(encoder_optimizer)
+                scaler.unscale_(decoder_optimizer)
+                nn.utils.clip_grad_norm_(encoder.parameters(), max_grad_norm)
+                nn.utils.clip_grad_norm_(decoder.parameters(), max_grad_norm)
+            scaler.step(encoder_optimizer)
+            scaler.step(decoder_optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            if max_grad_norm is not None:
+                nn.utils.clip_grad_norm_(encoder.parameters(), max_grad_norm)
+                nn.utils.clip_grad_norm_(decoder.parameters(), max_grad_norm)
+            encoder_optimizer.step()
+            decoder_optimizer.step()
 
         total_loss += loss.item()
 
@@ -163,6 +181,8 @@ def train(
     scheduler_patience: int | None = None,
     scheduler_factor: float = 0.5,
     max_grad_norm: float | None = None,
+    use_amp: bool = False,
+    device: torch.device | None = None,
 ) -> TrainResult:
     """Train the encoder-decoder model.
 
@@ -183,6 +203,9 @@ def train(
         scheduler_factor: Factor to reduce learning rate by (default 0.5).
         max_grad_norm: If set, clip gradients to this max norm.
             Common values are 1.0 or 5.0. Default is None (no clipping).
+        use_amp: If True, use automatic mixed precision for faster training.
+            Only effective on CUDA GPUs with Tensor Cores.
+        device: Device being used for training. Required if use_amp is True.
 
     Returns:
         TrainResult containing train and validation loss histories.
@@ -197,6 +220,18 @@ def train(
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
     decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate)
     criterion = nn.NLLLoss()
+
+    # Mixed precision training setup
+    scaler = None
+    device_type = "cpu"
+    if device is not None:
+        device_type = device.type
+    if use_amp:
+        if device_type == "cuda":
+            scaler = GradScaler()
+            logger.info("Using automatic mixed precision (AMP)")
+        else:
+            logger.warning("AMP requested but device is not CUDA. Disabling AMP.")
 
     early_stopping = None
     if early_stopping_patience is not None and val_dataloader is not None:
@@ -222,6 +257,8 @@ def train(
             decoder_optimizer,
             criterion,
             max_grad_norm,
+            scaler,
+            device_type,
         )
         print_loss_total += train_loss
         plot_loss_total += train_loss
@@ -265,7 +302,7 @@ def train(
                 plot_val_loss_total = 0.0
 
         # Step learning rate schedulers
-        if encoder_scheduler is not None and val_loss is not None:
+        if encoder_scheduler is not None and decoder_scheduler is not None and val_loss is not None:
             old_lr = encoder_optimizer.param_groups[0]["lr"]
             encoder_scheduler.step(val_loss)
             decoder_scheduler.step(val_loss)
