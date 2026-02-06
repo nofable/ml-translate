@@ -324,6 +324,49 @@ class TestEarlyStopping:
         assert es.best_loss == 0.8
 
 
+class TestGradientClipping:
+    def test_train_epoch_with_gradient_clipping(self, training_setup, small_dataloader):
+        """Test that train_epoch works with gradient clipping."""
+        encoder, decoder, enc_opt, dec_opt, criterion = training_setup
+
+        loss = train_epoch(
+            small_dataloader, encoder, decoder, enc_opt, dec_opt, criterion,
+            max_grad_norm=1.0,
+        )
+
+        assert isinstance(loss, float)
+        assert loss > 0
+
+    def test_train_epoch_without_gradient_clipping(self, training_setup, small_dataloader):
+        """Test that train_epoch works without gradient clipping."""
+        encoder, decoder, enc_opt, dec_opt, criterion = training_setup
+
+        loss = train_epoch(
+            small_dataloader, encoder, decoder, enc_opt, dec_opt, criterion,
+            max_grad_norm=None,
+        )
+
+        assert isinstance(loss, float)
+        assert loss > 0
+
+    @pytest.mark.slow
+    def test_train_with_gradient_clipping(self, training_setup, small_dataloader):
+        """Test that train works with gradient clipping enabled."""
+        encoder, decoder, _, _, _ = training_setup
+
+        result = train(
+            small_dataloader,
+            encoder,
+            decoder,
+            n_epochs=2,
+            print_every=1,
+            plot_every=1,
+            max_grad_norm=1.0,
+        )
+
+        assert len(result.train_losses) == 2
+
+
 class TestLearningRateScheduler:
     @pytest.mark.slow
     def test_train_with_scheduler(self, training_setup, small_dataloader):

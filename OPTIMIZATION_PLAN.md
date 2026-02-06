@@ -44,8 +44,8 @@ This document outlines optimization and extension opportunities for the neural m
 ### 2.2 Gradient Clipping
 - **Location**: `src/ml_translate/train.py`
 - **Current**: No gradient clipping (risk of exploding gradients)
-- **Change**: Add `clip_grad_norm_()` before optimizer step
-- **Status**: [ ] Not started
+- **Change**: Add `clip_grad_norm_()` before optimizer step, default max_norm=1.0
+- **Status**: [x] Complete
 
 ### 2.3 Model Checkpointing
 - **Location**: New file or `src/ml_translate/train.py`
@@ -169,7 +169,7 @@ This document outlines optimization and extension opportunities for the neural m
 | Phase | Items | Completed | Status |
 |-------|-------|-----------|--------|
 | 1. Critical Foundation | 4 | 4 | Complete |
-| 2. Training Improvements | 4 | 1 | In progress |
+| 2. Training Improvements | 4 | 2 | In progress |
 | 3. Embeddings & Architecture | 5 | 0 | Not started |
 | 4. Evaluation & Decoding | 3 | 0 | Not started |
 | 5. Performance | 3 | 0 | Not started |

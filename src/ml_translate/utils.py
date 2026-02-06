@@ -16,12 +16,12 @@ def get_project_root() -> Path:
 def asMinutes(s: float) -> str:
     m = math.floor(s / 60)
     s -= m * 60
-    return f"{m} {s}"
+    return f"{m}m {s:.0f}s"
 
 
 def timeSince(since: float, percent: float) -> str:
     now = time.time()
-    s = now - since
-    es = s / (percent)
-    rs = es - s
-    return f"{asMinutes(s)} (- {asMinutes(rs)})"
+    elapsed = now - since
+    estimated_total = elapsed / percent
+    remaining = estimated_total - elapsed
+    return f"{asMinutes(elapsed)} (remaining: {asMinutes(remaining)})"

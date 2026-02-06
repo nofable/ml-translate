@@ -22,6 +22,7 @@ def train_epoch(
     encoder_optimizer: Optimizer,
     decoder_optimizer: Optimizer,
     criterion: nn.Module,
+    max_grad_norm: float | None = None,
 ) -> float:
     """Train for one epoch.
 
@@ -32,6 +33,7 @@ def train_epoch(
         encoder_optimizer: Optimizer for encoder.
         decoder_optimizer: Optimizer for decoder.
         criterion: Loss function.
+        max_grad_norm: If set, clip gradients to this max norm.
 
     Returns:
         Average loss over the epoch.
@@ -53,6 +55,10 @@ def train_epoch(
             decoder_outputs.view(-1, decoder_outputs.size(-1)), target_tensor.view(-1)
         )
         loss.backward()
+
+        if max_grad_norm is not None:
+            nn.utils.clip_grad_norm_(encoder.parameters(), max_grad_norm)
+            nn.utils.clip_grad_norm_(decoder.parameters(), max_grad_norm)
 
         encoder_optimizer.step()
         decoder_optimizer.step()
@@ -156,6 +162,7 @@ def train(
     early_stopping_patience: int | None = None,
     scheduler_patience: int | None = None,
     scheduler_factor: float = 0.5,
+    max_grad_norm: float | None = None,
 ) -> TrainResult:
     """Train the encoder-decoder model.
 
@@ -174,6 +181,8 @@ def train(
         scheduler_patience: If set, reduce learning rate after this many epochs
             without validation loss improvement. Requires val_dataloader.
         scheduler_factor: Factor to reduce learning rate by (default 0.5).
+        max_grad_norm: If set, clip gradients to this max norm.
+            Common values are 1.0 or 5.0. Default is None (no clipping).
 
     Returns:
         TrainResult containing train and validation loss histories.
@@ -212,6 +221,7 @@ def train(
             encoder_optimizer,
             decoder_optimizer,
             criterion,
+            max_grad_norm,
         )
         print_loss_total += train_loss
         plot_loss_total += train_loss
@@ -230,21 +240,18 @@ def train(
             if val_loss is not None:
                 print_val_loss_avg = print_val_loss_total / print_every
                 print_val_loss_total = 0.0
+                progress = epoch / n_epochs * 100
                 logger.info(
-                    "%s (%d %.0f%%) train=%.4f val=%.4f",
-                    timeSince(start, epoch / n_epochs),
-                    epoch,
-                    epoch / n_epochs * 100,
-                    print_loss_avg,
-                    print_val_loss_avg,
+                    f"{timeSince(start, epoch / n_epochs)} "
+                    f"(epoch {epoch}, {progress:.0f}%) "
+                    f"train_loss={print_loss_avg:.3f} val_loss={print_val_loss_avg:.3f}"
                 )
             else:
+                progress = epoch / n_epochs * 100
                 logger.info(
-                    "%s (%d %.0f%%) %.4f",
-                    timeSince(start, epoch / n_epochs),
-                    epoch,
-                    epoch / n_epochs * 100,
-                    print_loss_avg,
+                    f"{timeSince(start, epoch / n_epochs)} "
+                    f"(epoch {epoch}, {progress:.0f}%) "
+                    f"train_loss={print_loss_avg:.3f}"
                 )
 
         if epoch % plot_every == 0:
@@ -264,12 +271,12 @@ def train(
             decoder_scheduler.step(val_loss)
             new_lr = encoder_optimizer.param_groups[0]["lr"]
             if new_lr < old_lr:
-                logger.info("Reducing learning rate to %.6f", new_lr)
+                logger.info(f"Reducing learning rate to {new_lr:.6f}")
 
         # Check early stopping
         if early_stopping is not None and val_loss is not None:
             if early_stopping(val_loss):
-                logger.info("Early stopping at epoch %d", epoch)
+                logger.info(f"Early stopping at epoch {epoch}")
                 result.stopped_early = True
                 break
 
