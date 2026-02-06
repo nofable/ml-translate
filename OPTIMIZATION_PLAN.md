@@ -64,14 +64,14 @@ This document outlines optimization and extension opportunities for the neural m
 ## Phase 3: Embeddings & Model Architecture
 
 ### 3.1 Pre-trained Embedding Support
-- **Location**: `src/ml_translate/model.py`, `src/ml_translate/data.py`
+- **Location**: `src/ml_translate/embedding.py`, `src/ml_translate/model.py`
 - **Current**: Random initialization only (`nn.Embedding`)
 - **Change**:
-  - Add `load_pretrained_embeddings()` method to models
-  - Add `load_glove_embeddings()` utility in data.py
-  - Config options: `pretrained_path`, `freeze_embeddings`, `embedding_size`
+  - Added `embedding.py` with `load_glove_embeddings()` and `PretrainedEmbedding` class
+  - Models accept optional `embedding` parameter
+  - Changed hidden_size to 100 to match GloVe dimension
 - **Impact**: 30-50% faster convergence
-- **Status**: [ ] Not started
+- **Status**: [x] Complete
 
 ### 3.2 Bidirectional Encoder
 - **Location**: `src/ml_translate/model.py`
@@ -170,7 +170,7 @@ This document outlines optimization and extension opportunities for the neural m
 |-------|-------|-----------|--------|
 | 1. Critical Foundation | 4 | 4 | Complete |
 | 2. Training Improvements | 4 | 2 (1 skipped) | In progress |
-| 3. Embeddings & Architecture | 5 | 0 | Not started |
+| 3. Embeddings & Architecture | 5 | 1 | In progress |
 | 4. Evaluation & Decoding | 3 | 0 | Not started |
 | 5. Performance | 3 | 0 | Not started |
 | 6. Data Augmentation | 2 | 0 | Not started |

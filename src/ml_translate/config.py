@@ -10,7 +10,8 @@ class TranslationConfig:
     max_length: int = 10
     dropout_p: float = 0.1
     learning_rate: float = 0.001
-    hidden_size: int = 128
+    # hidden_size must match GloVe embedding dimension (50, 100, 200, or 300)
+    hidden_size: int = 100
     batch_size: int = 32
 
     # Data split ratios

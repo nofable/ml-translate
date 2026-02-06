@@ -9,12 +9,19 @@ from ml_translate.data import SOS_token, MAX_LENGTH
 
 class EncoderRNN(nn.Module):
     def __init__(
-        self, input_size: int, hidden_size: int, dropout_p: float = default_config.dropout_p
+        self,
+        input_size: int,
+        hidden_size: int,
+        dropout_p: float = default_config.dropout_p,
+        embedding: nn.Module | None = None,
     ):
         super().__init__()
         self.hidden_size = hidden_size
 
-        self.embedding = nn.Embedding(input_size, hidden_size)
+        if embedding is not None:
+            self.embedding = embedding
+        else:
+            self.embedding = nn.Embedding(input_size, hidden_size)
         self.gru = nn.GRU(hidden_size, hidden_size, batch_first=True)
         self.dropout = nn.Dropout(dropout_p)
 
@@ -26,11 +33,18 @@ class EncoderRNN(nn.Module):
 
 class DecoderRNN(nn.Module):
     def __init__(
-        self, hidden_size: int, output_size: int, device: torch.device | None = None
+        self,
+        hidden_size: int,
+        output_size: int,
+        device: torch.device | None = None,
+        embedding: nn.Module | None = None,
     ):
         super().__init__()
         self.device = device
-        self.embedding = nn.Embedding(output_size, hidden_size)
+        if embedding is not None:
+            self.embedding = embedding
+        else:
+            self.embedding = nn.Embedding(output_size, hidden_size)
         self.gru = nn.GRU(hidden_size, hidden_size, batch_first=True)
         self.out = nn.Linear(hidden_size, output_size)
 
@@ -103,10 +117,14 @@ class AttnDecoderRNN(nn.Module):
         output_size: int,
         dropout_p: float = default_config.dropout_p,
         device: torch.device | None = None,
+        embedding: nn.Module | None = None,
     ):
         super().__init__()
         self.device = device
-        self.embedding = nn.Embedding(output_size, hidden_size)
+        if embedding is not None:
+            self.embedding = embedding
+        else:
+            self.embedding = nn.Embedding(output_size, hidden_size)
         self.attention = BahdanauAttention(hidden_size)
         self.gru = nn.GRU(2 * hidden_size, hidden_size, batch_first=True)
         self.out = nn.Linear(hidden_size, output_size)
