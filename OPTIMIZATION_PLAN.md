@@ -80,11 +80,12 @@ This document outlines optimization and extension opportunities for the neural m
 - **Impact**: ~15% quality improvement
 - **Status**: [ ] Not started
 
-### 3.3 Multi-Head Attention
+### 3.3 Luong Attention
 - **Location**: `src/ml_translate/model.py`
 - **Current**: Single Bahdanau attention only
-- **Change**: Add `MultiHeadAttention` class as alternative
-- **Status**: [ ] Not started
+- **Change**: Added `LuongAttention` class with dot/general/concat methods.
+  `AttnDecoderRNN` now accepts `attention_type` parameter.
+- **Status**: [x] Complete
 
 ### 3.4 Layer Stacking
 - **Location**: `src/ml_translate/model.py`
@@ -171,7 +172,7 @@ This document outlines optimization and extension opportunities for the neural m
 |-------|-------|-----------|--------|
 | 1. Critical Foundation | 4 | 4 | Complete |
 | 2. Training Improvements | 4 | 2 (1 skipped) | In progress |
-| 3. Embeddings & Architecture | 5 | 1 | In progress |
+| 3. Embeddings & Architecture | 5 | 2 | In progress |
 | 4. Evaluation & Decoding | 3 | 0 | Not started |
 | 5. Performance | 3 | 3 | Complete |
 | 6. Data Augmentation | 2 | 0 | Not started |

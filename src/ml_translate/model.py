@@ -97,6 +97,12 @@ class DecoderRNN(nn.Module):
 
 
 class BahdanauAttention(nn.Module):
+    """Additive attention mechanism (Bahdanau et al., 2015).
+
+    Computes attention scores using a learned alignment model:
+    score = V * tanh(W * query + U * keys)
+    """
+
     def __init__(self, hidden_size: int):
         super().__init__()
         self.Wa = nn.Linear(hidden_size, hidden_size)
@@ -113,6 +119,59 @@ class BahdanauAttention(nn.Module):
         return context, weights
 
 
+class LuongAttention(nn.Module):
+    """Multiplicative attention mechanism (Luong et al., 2015).
+
+    Supports three scoring methods:
+    - "dot": score = query · keys
+    - "general": score = query · W · keys
+    - "concat": score = V · tanh(W · [query; keys])
+    """
+
+    def __init__(self, hidden_size: int, method: str = "general"):
+        super().__init__()
+        self.method = method
+        self.hidden_size = hidden_size
+
+        if method == "general":
+            self.W = nn.Linear(hidden_size, hidden_size, bias=False)
+        elif method == "concat":
+            self.W = nn.Linear(hidden_size * 2, hidden_size, bias=False)
+            self.V = nn.Linear(hidden_size, 1, bias=False)
+        elif method != "dot":
+            raise ValueError(f"Unknown attention method: {method}. Use 'dot', 'general', or 'concat'.")
+
+    def forward(self, query: Tensor, keys: Tensor) -> tuple[Tensor, Tensor]:
+        """
+        Args:
+            query: Decoder hidden state (batch, 1, hidden_size)
+            keys: Encoder outputs (batch, seq_len, hidden_size)
+
+        Returns:
+            context: Weighted sum of keys (batch, 1, hidden_size)
+            weights: Attention weights (batch, 1, seq_len)
+        """
+        if self.method == "dot":
+            # score = query · keys^T
+            scores = torch.bmm(query, keys.transpose(1, 2))
+        elif self.method == "general":
+            # score = query · W · keys^T
+            scores = torch.bmm(self.W(query), keys.transpose(1, 2))
+        else:  # concat
+            # Expand query to match keys sequence length
+            seq_len = keys.size(1)
+            query_expanded = query.expand(-1, seq_len, -1)
+            # Concatenate and compute score
+            concat = torch.cat([query_expanded, keys], dim=2)
+            scores = self.V(torch.tanh(self.W(concat)))
+            scores = scores.transpose(1, 2)
+
+        weights = F.softmax(scores, dim=-1)
+        context = torch.bmm(weights, keys)
+
+        return context, weights
+
+
 class AttnDecoderRNN(nn.Module):
     def __init__(
         self,
@@ -121,14 +180,39 @@ class AttnDecoderRNN(nn.Module):
         dropout_p: float = default_config.dropout_p,
         device: torch.device | None = None,
         embedding: nn.Module | None = None,
+        attention_type: str = "bahdanau",
     ):
+        """
+        Args:
+            hidden_size: Size of hidden states.
+            output_size: Size of output vocabulary.
+            dropout_p: Dropout probability.
+            device: Device to use for tensors.
+            embedding: Optional pre-trained embedding layer.
+            attention_type: Type of attention mechanism. Options:
+                - "bahdanau": Additive attention (default)
+                - "luong_dot": Luong dot-product attention
+                - "luong_general": Luong general attention
+                - "luong_concat": Luong concat attention
+        """
         super().__init__()
         self.device = device
+        self.attention_type = attention_type
+
         if embedding is not None:
             self.embedding = embedding
         else:
             self.embedding = nn.Embedding(output_size, hidden_size)
-        self.attention = BahdanauAttention(hidden_size)
+
+        # Create attention mechanism
+        if attention_type == "bahdanau":
+            self.attention = BahdanauAttention(hidden_size)
+        elif attention_type.startswith("luong"):
+            method = attention_type.split("_")[1] if "_" in attention_type else "general"
+            self.attention = LuongAttention(hidden_size, method=method)
+        else:
+            raise ValueError(f"Unknown attention type: {attention_type}")
+
         self.gru = nn.GRU(2 * hidden_size, hidden_size, batch_first=True)
         self.out = nn.Linear(hidden_size, output_size)
         self.dropout = nn.Dropout(dropout_p)

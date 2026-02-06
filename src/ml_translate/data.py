@@ -128,7 +128,7 @@ def readLangs(
 def filterPair(p: list[str]) -> bool:
     return (
         len(p[0].split(" ")) < MAX_LENGTH and len(p[1].split(" ")) < MAX_LENGTH
-        # and p[1].startswith(eng_prefixes) # uncomment this line for faster training on cpu hardware
+        # and p[1].startswith( eng_prefixes )  # uncomment this line for faster training on cpu hardware
     )
 
 
