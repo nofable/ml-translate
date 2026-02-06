@@ -51,7 +51,7 @@ This document outlines optimization and extension opportunities for the neural m
 - **Location**: New file or `src/ml_translate/train.py`
 - **Current**: No saving of model state
 - **Change**: Add `CheckpointManager` class to save/load best models
-- **Status**: [ ] Not started
+- **Status**: [~] Skipped (not needed for current model size)
 
 ### 2.4 Enhanced Configuration
 - **Location**: `src/ml_translate/config.py`
@@ -169,7 +169,7 @@ This document outlines optimization and extension opportunities for the neural m
 | Phase | Items | Completed | Status |
 |-------|-------|-----------|--------|
 | 1. Critical Foundation | 4 | 4 | Complete |
-| 2. Training Improvements | 4 | 2 | In progress |
+| 2. Training Improvements | 4 | 2 (1 skipped) | In progress |
 | 3. Embeddings & Architecture | 5 | 0 | Not started |
 | 4. Evaluation & Decoding | 3 | 0 | Not started |
 | 5. Performance | 3 | 0 | Not started |

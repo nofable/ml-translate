@@ -7,4 +7,5 @@ short commit hash: f5b0c4d
 BLEU score: 0.4568
 
 After 2.2 Gradient Clipping with max grad 3:
+short commit hash: 0b25e64
 BLUE score: 0.4245
