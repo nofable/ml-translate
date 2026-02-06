@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 import torch
 from torch import nn, optim
 from torch.optim import Optimizer
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 
 from ml_translate.config import default_config
@@ -153,6 +154,8 @@ def train(
     plot_every: int = 100,
     val_dataloader: DataLoader | None = None,
     early_stopping_patience: int | None = None,
+    scheduler_patience: int | None = None,
+    scheduler_factor: float = 0.5,
 ) -> TrainResult:
     """Train the encoder-decoder model.
 
@@ -168,6 +171,9 @@ def train(
             validation loss is computed after each epoch.
         early_stopping_patience: If set, stop training after this many epochs
             without validation loss improvement. Requires val_dataloader.
+        scheduler_patience: If set, reduce learning rate after this many epochs
+            without validation loss improvement. Requires val_dataloader.
+        scheduler_factor: Factor to reduce learning rate by (default 0.5).
 
     Returns:
         TrainResult containing train and validation loss histories.
@@ -186,6 +192,17 @@ def train(
     early_stopping = None
     if early_stopping_patience is not None and val_dataloader is not None:
         early_stopping = EarlyStopping(patience=early_stopping_patience)
+
+    # Learning rate schedulers
+    encoder_scheduler = None
+    decoder_scheduler = None
+    if scheduler_patience is not None and val_dataloader is not None:
+        encoder_scheduler = ReduceLROnPlateau(
+            encoder_optimizer, mode="min", factor=scheduler_factor, patience=scheduler_patience
+        )
+        decoder_scheduler = ReduceLROnPlateau(
+            decoder_optimizer, mode="min", factor=scheduler_factor, patience=scheduler_patience
+        )
 
     for epoch in range(1, n_epochs + 1):
         train_loss = train_epoch(
@@ -239,6 +256,15 @@ def train(
                 plot_val_loss_avg = plot_val_loss_total / plot_every
                 result.val_losses.append(plot_val_loss_avg)
                 plot_val_loss_total = 0.0
+
+        # Step learning rate schedulers
+        if encoder_scheduler is not None and val_loss is not None:
+            old_lr = encoder_optimizer.param_groups[0]["lr"]
+            encoder_scheduler.step(val_loss)
+            decoder_scheduler.step(val_loss)
+            new_lr = encoder_optimizer.param_groups[0]["lr"]
+            if new_lr < old_lr:
+                logger.info("Reducing learning rate to %.6f", new_lr)
 
         # Check early stopping
         if early_stopping is not None and val_loss is not None:

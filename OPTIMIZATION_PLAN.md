@@ -38,8 +38,8 @@ This document outlines optimization and extension opportunities for the neural m
 ### 2.1 Learning Rate Scheduling
 - **Location**: `src/ml_translate/train.py`
 - **Current**: Fixed learning rate throughout training
-- **Change**: Add `ReduceLROnPlateau` or cosine annealing scheduler
-- **Status**: [ ] Not started
+- **Change**: Add `ReduceLROnPlateau` scheduler with configurable patience/factor
+- **Status**: [x] Complete
 
 ### 2.2 Gradient Clipping
 - **Location**: `src/ml_translate/train.py`
@@ -169,7 +169,7 @@ This document outlines optimization and extension opportunities for the neural m
 | Phase | Items | Completed | Status |
 |-------|-------|-----------|--------|
 | 1. Critical Foundation | 4 | 4 | Complete |
-| 2. Training Improvements | 4 | 0 | Not started |
+| 2. Training Improvements | 4 | 1 | In progress |
 | 3. Embeddings & Architecture | 5 | 0 | Not started |
 | 4. Evaluation & Decoding | 3 | 0 | Not started |
 | 5. Performance | 3 | 0 | Not started |

@@ -322,3 +322,44 @@ class TestEarlyStopping:
         es(0.8)  # Improvement, counter=0
         assert es.counter == 0
         assert es.best_loss == 0.8
+
+
+class TestLearningRateScheduler:
+    @pytest.mark.slow
+    def test_train_with_scheduler(self, training_setup, small_dataloader):
+        """Test that training works with learning rate scheduler."""
+        encoder, decoder, _, _, _ = training_setup
+
+        result = train(
+            small_dataloader,
+            encoder,
+            decoder,
+            n_epochs=4,
+            print_every=1,
+            plot_every=1,
+            val_dataloader=small_dataloader,
+            scheduler_patience=2,
+            scheduler_factor=0.5,
+        )
+
+        assert isinstance(result, TrainResult)
+        assert len(result.train_losses) == 4
+
+    @pytest.mark.slow
+    def test_train_scheduler_without_validation(self, training_setup, small_dataloader):
+        """Test that scheduler is ignored without validation dataloader."""
+        encoder, decoder, _, _, _ = training_setup
+
+        # Should not raise error even though scheduler_patience is set
+        result = train(
+            small_dataloader,
+            encoder,
+            decoder,
+            n_epochs=2,
+            print_every=1,
+            plot_every=1,
+            val_dataloader=None,
+            scheduler_patience=2,
+        )
+
+        assert len(result.train_losses) == 2
