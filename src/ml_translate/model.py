@@ -50,12 +50,13 @@ class AddAndNorm:
         return (self.weights * self.layer_norm(x + sublayer_output)) + self.biases
 
 
-# class MultiHeadAttention:
-#     def __init__(self):
-#         pass
-
-#     def forward(self, X):
-#         return X
+def scaled_dot_product_attention(q, k, v, mask=None):
+    d_k = np.size(k, axis=-1)
+    inter = (q @ k.T) / np.sqrt(d_k)
+    if mask is not None:
+        inter = np.where(mask == 0, -np.inf, inter)
+    inter = softmax(inter)
+    return inter @ v
 
 
 class FeedForward:
@@ -78,6 +79,15 @@ class FeedForward:
 
 def ReLU(x):
     return np.maximum(0, x)
+
+
+def softmax(x):
+    # recommended by AI for numerical stabliity issue
+    # For large values of x, np.exp(x) can overflow to inf.
+    # The standard fix is to subtract the max before exponentiating.
+    x_max = np.max(x, axis=-1, keepdims=True)
+    e_x = np.exp(x - x_max)
+    return e_x / np.sum(e_x, axis=-1, keepdims=True)
 
 
 # class DecoderStack:
