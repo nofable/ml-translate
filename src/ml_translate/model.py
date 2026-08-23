@@ -1,77 +1,63 @@
-import numpy as np
+import torch
 import torch.nn as nn
 
 
-def ReLU(x):
-    return np.maximum(0, x)
-
-
-def softmax(x):
-    x_max = np.max(x, axis=-1, keepdims=True)
-    e_x = np.exp(x - x_max)
-    return e_x / np.sum(e_x, axis=-1, keepdims=True)
-
-
 def scaled_dot_product_attention(q, k, v, mask=None):
-    d_k = np.size(k, axis=-1)
+    d_k = k.size(dim=-1)  # size of the token vector (inner most)
     inter = q @ k.T
-    inter = inter / np.sqrt(d_k)
+    inter = inter / torch.sqrt(torch.tensor([d_k]))
     if mask is not None:
-        inter = np.where(mask == 0, -np.inf, inter)
+        inter = torch.where(mask == 0, -torch.inf, inter)
+    softmax = nn.Softmax(dim=-1)
     inter = softmax(inter)
-    return v @ inter.T
+    return inter @ v
 
 
-class Norm:
+class Norm(nn.Module):
     def __init__(self, d_model, eps=1e-6):
-        self.gamma = np.ones(d_model)
-        self.beta = np.zeros(d_model)
+        super().__init__()
+        # parameters shared across positions
+        self.gamma = nn.Parameter(torch.ones(d_model))
+        self.beta = nn.Parameter(torch.zeros(d_model))
         self.eps = eps
 
-    def forward(self, x):
-        mean = np.mean(x, axis=-1, keepdims=True)
-        var = np.var(x, axis=-1, keepdims=True)
-        return self.gamma * (x - mean) / np.sqrt(var + self.eps) + self.beta
+    def forward(self, input):
+        mean = torch.mean(input, dim=-1, keepdim=True)
+        var = torch.var(input, dim=-1, keepdim=True)
+        return self.gamma * (input - mean) / torch.sqrt(var + self.eps) + self.beta
 
 
-class Linear:
-    def __init__(self, in_features, out_features):
-        # TODO make these learnable
-        self.w = np.ones((in_features, out_features))
-        self.b = np.zeros(out_features)
-
-    def forward(self, x):
-        return x @ self.w + self.b
-
-
-class FeedForward:
+class FeedForward(nn.Module):
     def __init__(self, d_model, d_hidden=2048):
-        # TODO make these learnable
-        self.w1 = np.ones((d_model, d_hidden))
-        self.b1 = np.zeros(d_hidden)
-        self.w2 = np.ones((d_hidden, d_model))
-        self.b2 = np.zeros(d_model)
+        super().__init__()
+        # parameters shared across positions
+        self.w1 = nn.Parameter(torch.ones((d_model, d_hidden)))
+        self.b1 = nn.Parameter(torch.zeros(d_hidden))
+        self.w2 = nn.Parameter(torch.ones((d_hidden, d_model)))
+        self.b2 = nn.Parameter(torch.zeros(d_model))
 
-    def forward(self, x):
-        return ReLU(x @ self.w1 + self.b1) @ self.w2 + self.b2
-
-
-class AddAndNorm:
-    def __init__(self, shape, eps=1e-6):
-        # TODO make these learnable
-        self.weights = np.ones(shape)
-        self.biases = np.zeros(shape)
-        self.norm = Norm(shape, eps)
-
-    def forward(self, x, sublayer_output):
-        return self.weights * self.norm.forward(x + sublayer_output) + self.biases
+    def forward(self, input):
+        ReLU = nn.ReLU()
+        return ReLU(input @ self.w1 + self.b1) @ self.w2 + self.b2
 
 
-class SingleHeadAttention:
+class AddAndNorm(nn.Module):
+    def __init__(self, d_model, eps=1e-6):
+        super().__init__()
+        self.norm = Norm(d_model=d_model, eps=eps)
+
+    def forward(self, input, sublayer_output):
+        # diverging from paper for better gradient flow
+        # paper gives LayerNorm(x + Sublayer(x))
+        return input + self.norm.forward(sublayer_output)
+
+
+class SingleHeadAttention(nn.Module):
     def __init__(self, d_in, d_out, mask=None):
-        self.v_linear = Linear(d_in, d_out)
-        self.k_linear = Linear(d_in, d_out)
-        self.q_linear = Linear(d_in, d_out)
+        super().__init__()
+        self.v_linear = nn.Linear(in_features=d_in, out_features=d_out)
+        self.k_linear = nn.Linear(in_features=d_in, out_features=d_out)
+        self.q_linear = nn.Linear(in_features=d_in, out_features=d_out)
         self.mask = mask
 
     def forward(self, v, k, q):
@@ -81,23 +67,32 @@ class SingleHeadAttention:
         return scaled_dot_product_attention(l_q, l_k, l_v, self.mask)
 
 
-class MultiHeadAttention:
+class MultiHeadAttention(nn.Module):
     # h is number of heads
-    def __init__(self, h, d_model, mask=None):
-        self.h = h
-        self.d_model = d_model
-        self.heads = [SingleHeadAttention(d_model, d_model / h, mask) for _ in range(h)]
-        self.out_linear = Linear(d_model, d_model)
+    def __init__(self, n_heads, d_model, mask=None):
+        super().__init__()
+        self.n_heads = n_heads
+        # ensure this is a neat split
+        assert d_model % n_heads == 0
+        self.heads = [
+            SingleHeadAttention(d_in=d_model, d_out=d_model / n_heads, mask=mask)
+            for _ in range(n_heads)
+        ]
+        self.out_linear = nn.Linear(d_model, d_model)
 
     def forward(self, v, k, q):
         outputs = [head.forward(v, k, q) for head in self.heads]
-        x = np.concat(outputs)
+        x = torch.concat(outputs)
         return self.out_linear.forward(x)
 
 
-class Encoder:
-    def __init__(self, size, n_layers, ff_d_hidden):
-        self.layers = [EncoderLayer(size, ff_d_hidden) for _ in range(n_layers)]
+class Encoder(nn.Module):
+    def __init__(self, d_model, n_layers, ff_d_hidden):
+        super().__init__()
+        self.layers = [
+            EncoderLayer(d_model=d_model, ff_d_hidden=ff_d_hidden)
+            for _ in range(n_layers)
+        ]
 
     def forward(self, input):
         # some embedding encoding
@@ -108,10 +103,13 @@ class Encoder:
         return x
 
 
-class EncoderLayer:
-    def __init__(self, size, d_hidden):
-        self.multiHeadSublayer = MultiHeadSublayer(size)
-        self.feedForwardSublayer = FeedForwardSublayer(size, d_hidden)
+class EncoderLayer(nn.Module):
+    def __init__(self, d_model, ff_d_hidden):
+        super().__init__()
+        self.multiHeadSublayer = MultiHeadSublayer(d_model=d_model)
+        self.feedForwardSublayer = FeedForwardSublayer(
+            d_model=d_model, d_hidden=ff_d_hidden
+        )
 
     def forward(self, input):
         x = input
@@ -120,9 +118,13 @@ class EncoderLayer:
         return x
 
 
-class Decoder:
-    def __init__(self, size, n_layers, ff_d_hidden):
-        self.layers = [DecoderLayer(size, ff_d_hidden) for _ in range(n_layers)]
+class Decoder(nn.Module):
+    def __init__(self, d_model, n_layers, ff_d_hidden):
+        super().__init__()
+        self.layers = [
+            DecoderLayer(d_model=d_model, ff_d_hidden=ff_d_hidden)
+            for _ in range(n_layers)
+        ]
 
     def forward(self, input, encoder_output):
         # some embedding encoding
@@ -133,11 +135,14 @@ class Decoder:
         return x
 
 
-class DecoderLayer:
-    def __init__(self, size, d_hidden):
-        self.maskedMultiHeadSublayer = MultiHeadSublayer(size, mask=None)
-        self.multiHeadSublayer = MultiHeadSublayer(size)
-        self.feedForwardSublayer = FeedForwardSublayer(size, d_hidden)
+class DecoderLayer(nn.Module):
+    def __init__(self, d_model, ff_d_hidden):
+        super().__init__()
+        self.maskedMultiHeadSublayer = MultiHeadSublayer(d_model=d_model, mask=None)
+        self.multiHeadSublayer = MultiHeadSublayer(d_model=d_model)
+        self.feedForwardSublayer = FeedForwardSublayer(
+            d_model=d_model, d_hidden=ff_d_hidden
+        )
 
     def forward(self, input, encoder_output):
         # need to do the right shift
@@ -149,10 +154,13 @@ class DecoderLayer:
         x = self.feedForwardSublayer
 
 
-class MultiHeadSublayer:
-    def __init__(self, size, mask=None):
-        self.multiHeadAttention = MultiHeadAttention(size, 8, mask)
-        self.addAndNorm = AddAndNorm(size)
+class MultiHeadSublayer(nn.Module):
+    def __init__(self, d_model, mask=None):
+        super().__init__()
+        self.multiHeadAttention = MultiHeadAttention(
+            n_heads=8, d_model=d_model, mask=mask
+        )
+        self.addAndNorm = AddAndNorm(d_model=d_model)
 
     def forward(self, input, override_k=None, override_v=None):
         k = override_k or input.clone()
@@ -163,10 +171,11 @@ class MultiHeadSublayer:
         return x
 
 
-class FeedForwardSublayer:
-    def __init__(self, size, d_hidden):
-        self.feedForward = FeedForward(size, d_hidden)
-        self.addAndNorm = AddAndNorm(size)
+class FeedForwardSublayer(nn.Module):
+    def __init__(self, d_model, d_hidden):
+        super().__init__()
+        self.feedForward = FeedForward(d_model=d_model, d_hidden=d_hidden)
+        self.addAndNorm = AddAndNorm(d_model=d_model)
 
     def forward(self, input):
         x = input
@@ -175,13 +184,25 @@ class FeedForwardSublayer:
         return x
 
 
-class Transformer:
+class Transformer(nn.Module):
     # size is 2-dim, first is sequence len, second is embedding size 512
-    def __init__(self, size, layers, ff_d_hidden):
-        self.size = size
-        self.layers = layers
-        self.encoder = Encoder(size, layers, ff_d_hidden)
-        self.decoder = Decoder(size, layers, ff_d_hidden)
+    def __init__(self, d_model, n_layers, ff_d_hidden):
+        super().__init__()
+        self.encoder = Encoder(
+            d_model=d_model, n_layers=n_layers, ff_d_hidden=ff_d_hidden
+        )
+        self.decoder = Decoder(
+            d_model=d_model, n_layers=n_layers, ff_d_hidden=ff_d_hidden
+        )
 
     def encode(self, input):
         self.encoder.forward(input)
+
+    def decode(self, input, encoder_output):
+        self.decoder.forward(input, encoder_output)
+
+    def transform(self, input):
+        encoder_output = self.encode(input)
+        decoder_output = self.decode(input, encoder_output)
+        # need to do final linear projection to embedding dictionary size and softmax
+        return decoder_output
