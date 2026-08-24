@@ -8,9 +8,11 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "altair>=6.2.2",
     "jupyterlab>=4.6.3",
     "jupytext>=1.19.5",
     "numpy>=2.4.2",
+    "pandas>=3.0.5",
     "torch>=2.13.0",
     "torchvision>=0.28.0",
 ]
