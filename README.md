@@ -23,6 +23,23 @@ Run all tests:
 uv run pytest
 ```
 
+## Jupyter & Jupytext
+
+For setup i ran:
+
+```bash
+uv add jupyterlab jupytext
+uv run jupyter labextension enable jupyterlab-jupytext
+```
+
+To run jupyter lab
+
+```bash
+uv run jupyter lab
+```
+
+Then right click on the notebook and open with notebook to make the jupytext render correctly.
+
 ## Classes from Annotated Transformer
 
 - Encoder
