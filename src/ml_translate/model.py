@@ -13,8 +13,24 @@ def scaled_dot_product_attention(q, k, v, mask=None):
     return inter @ v
 
 
+class PositionalEncoder(nn.Module):
+    def __init__(self, d_model, d_seq):
+        super().__init__()
+        positions = torch.arange(d_seq).unsqueeze(1)
+        encodings = torch.zeros(d_seq, d_model)
+        div_term = torch.exp(
+            torch.arange(0, d_model, 2) * (-torch.log(torch.tensor(10000.0)) / d_model)
+        )
+        encodings[:, 0::2] = torch.sin(positions * div_term)
+        encodings[:, 1::2] = torch.cos(positions * div_term)
+        self.register_buffer("encodings", encodings)
+
+    def forward(self, input):
+        return input + self.encodings
+
+
 class Transformer(nn.Module):
-    def __init__(self, d_model, n_layers, ff_d_hidden):
+    def __init__(self, d_model, d_seq, n_layers, ff_d_hidden):
         super().__init__()
         self.encoder = Encoder(
             d_model=d_model, n_layers=n_layers, ff_d_hidden=ff_d_hidden
@@ -22,16 +38,21 @@ class Transformer(nn.Module):
         self.decoder = Decoder(
             d_model=d_model, n_layers=n_layers, ff_d_hidden=ff_d_hidden
         )
+        self.positionalEncoder = PositionalEncoder(d_model, d_seq)
 
     def encode(self, input):
-        self.encoder.forward(input)
+        x = self.positionalEncoder.forward(input)
+        x = self.encoder.forward(x)
+        return x
 
     def decode(self, input, encoder_output):
-        self.decoder.forward(input, encoder_output)
+        x = self.positionalEncoder.forward(input)
+        x = self.decoder.forward(x, encoder_output)
+        return x
 
     def transform(self, input):
         encoder_output = self.encode(input)
-        # TODO: need to make sure the decoder input is correct
+        # TODO: need to make sure the decoder input is correct, with right shift and masking etc
         decoder_output = self.decode(input, encoder_output)
         # TODO: need to do final linear projection to embedding dictionary size and softmax
         return decoder_output
@@ -47,7 +68,6 @@ class Encoder(nn.Module):
 
     def forward(self, input):
         # some embedding encoding
-        # positional encoding
         x = input
         for layer in self.layers:
             x = layer.forward(x)
@@ -79,7 +99,6 @@ class Decoder(nn.Module):
 
     def forward(self, input, encoder_output):
         # some embedding encoding
-        # positional embedding
         x = input
         for layer in self.layers:
             x = layer.forward(x, encoder_output)
