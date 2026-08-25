@@ -30,7 +30,7 @@ class PositionalEncoder(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, d_model, d_seq, n_layers, ff_d_hidden):
+    def __init__(self, d_model, d_seq, n_layers, ff_d_hidden, n_vocab):
         super().__init__()
         self.encoder = Encoder(
             d_model=d_model, n_layers=n_layers, ff_d_hidden=ff_d_hidden
@@ -39,14 +39,18 @@ class Transformer(nn.Module):
             d_model=d_model, n_layers=n_layers, ff_d_hidden=ff_d_hidden
         )
         self.positionalEncoder = PositionalEncoder(d_model, d_seq)
+        self.encoder_embed = nn.Embedding(n_vocab, d_model)
+        self.decoder_embed = nn.Embedding(n_vocab, d_model)
 
     def encode(self, input):
-        x = self.positionalEncoder.forward(input)
+        x = self.encoder_embed(input)
+        x = self.positionalEncoder.forward(x)
         x = self.encoder.forward(x)
         return x
 
     def decode(self, input, encoder_output):
-        x = self.positionalEncoder.forward(input)
+        x = self.decoder_embed(input)
+        x = self.positionalEncoder.forward(x)
         x = self.decoder.forward(x, encoder_output)
         return x
 
@@ -67,7 +71,6 @@ class Encoder(nn.Module):
         ]
 
     def forward(self, input):
-        # some embedding encoding
         x = input
         for layer in self.layers:
             x = layer.forward(x)
@@ -98,7 +101,6 @@ class Decoder(nn.Module):
         ]
 
     def forward(self, input, encoder_output):
-        # some embedding encoding
         x = input
         for layer in self.layers:
             x = layer.forward(x, encoder_output)
@@ -168,7 +170,6 @@ class AddAndNorm(nn.Module):
 class Norm(nn.Module):
     def __init__(self, d_model, eps=1e-6):
         super().__init__()
-        # parameters shared across positions
         self.gamma = nn.Parameter(torch.ones(d_model))
         self.beta = nn.Parameter(torch.zeros(d_model))
         self.eps = eps
@@ -182,7 +183,6 @@ class Norm(nn.Module):
 class FeedForward(nn.Module):
     def __init__(self, d_model, d_hidden):
         super().__init__()
-        # parameters shared across positions
         self.w1 = nn.Parameter(torch.ones((d_model, d_hidden)))
         self.b1 = nn.Parameter(torch.zeros(d_hidden))
         self.w2 = nn.Parameter(torch.ones((d_hidden, d_model)))
@@ -194,11 +194,9 @@ class FeedForward(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
-    # h is number of heads
     def __init__(self, n_heads, d_model, mask=None):
         super().__init__()
         self.n_heads = n_heads
-        # ensure this is a neat split
         assert d_model % n_heads == 0
         self.heads = [
             SingleHeadAttention(d_in=d_model, d_out=d_model / n_heads, mask=mask)
