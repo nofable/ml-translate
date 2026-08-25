@@ -1,5 +1,5 @@
 import torch
-from ml_translate.model import scaled_dot_product_attention
+from ml_translate.transformer import scaled_dot_product_attention
 
 
 class TestTranspose:

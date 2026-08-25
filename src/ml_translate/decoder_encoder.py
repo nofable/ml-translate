@@ -1,9 +1,12 @@
 import torch
+from torch import Tensor
 import torch.nn as nn
 
 
-def scaled_dot_product_attention(q, k, v, mask=None):
-    d_k = k.size(dim=-1)  # size of the token vector (inner most)
+def scaled_dot_product_attention(
+    q: Tensor, k: Tensor, v: Tensor, mask: Tensor | None = None
+) -> Tensor:
+    d_k = k.size(dim=-1)
     inter = q @ k.T
     inter = inter / torch.sqrt(torch.tensor([d_k]))
     if mask is not None:
@@ -13,24 +16,8 @@ def scaled_dot_product_attention(q, k, v, mask=None):
     return inter @ v
 
 
-class PositionalEncoder(nn.Module):
-    def __init__(self, d_model, d_seq):
-        super().__init__()
-        positions = torch.arange(d_seq).unsqueeze(1)
-        encodings = torch.zeros(d_seq, d_model)
-        div_term = torch.exp(
-            torch.arange(0, d_model, 2) * (-torch.log(torch.tensor(10000.0)) / d_model)
-        )
-        encodings[:, 0::2] = torch.sin(positions * div_term)
-        encodings[:, 1::2] = torch.cos(positions * div_term)
-        self.register_buffer("encodings", encodings)
-
-    def forward(self, input):
-        return input + self.encodings
-
-
-class Transformer(nn.Module):
-    def __init__(self, d_model, d_seq, n_layers, ff_d_hidden, n_vocab):
+class EncoderDecoder(nn.Module):
+    def __init__(self, d_model, n_layers, ff_d_hidden):
         super().__init__()
         self.encoder = Encoder(
             d_model=d_model, n_layers=n_layers, ff_d_hidden=ff_d_hidden
@@ -38,39 +25,32 @@ class Transformer(nn.Module):
         self.decoder = Decoder(
             d_model=d_model, n_layers=n_layers, ff_d_hidden=ff_d_hidden
         )
-        self.positionalEncoder = PositionalEncoder(d_model, d_seq)
-        self.encoder_embed = nn.Embedding(n_vocab, d_model)
-        self.decoder_embed = nn.Embedding(n_vocab, d_model)
 
-    def encode(self, input):
-        x = self.encoder_embed(input)
-        x = self.positionalEncoder.forward(x)
-        x = self.encoder.forward(x)
+    def encode(self, input: Tensor) -> Tensor:
+        x = self.encoder.forward(input)
         return x
 
-    def decode(self, input, encoder_output):
-        x = self.decoder_embed(input)
-        x = self.positionalEncoder.forward(x)
-        x = self.decoder.forward(x, encoder_output)
+    def decode(self, input: Tensor, encoder_output: Tensor) -> Tensor:
+        x = self.decoder.forward(input, encoder_output)
         return x
 
-    def transform(self, input):
-        encoder_output = self.encode(input)
-        # TODO: need to make sure the decoder input is correct, with right shift and masking etc
-        decoder_output = self.decode(input, encoder_output)
-        # TODO: need to do final linear projection to embedding dictionary size and softmax
+    # TODO: for each input, we will actually want to train against a parallel set of masked target_input
+    # eg. hello friend -> _ _ _ _, _ bonjour _ _, _ bonjour mon _, _ bonjour mon ami
+    def transform(self, src_input: Tensor, target_input) -> Tensor:
+        encoder_output = self.encode(src_input)
+        decoder_output = self.decode(target_input, encoder_output)
         return decoder_output
 
 
 class Encoder(nn.Module):
-    def __init__(self, d_model, n_layers, ff_d_hidden):
+    def __init__(self, d_model: int, n_layers: int, ff_d_hidden: int):
         super().__init__()
         self.layers = [
             EncoderLayer(d_model=d_model, ff_d_hidden=ff_d_hidden)
             for _ in range(n_layers)
         ]
 
-    def forward(self, input):
+    def forward(self, input: Tensor) -> Tensor:
         x = input
         for layer in self.layers:
             x = layer.forward(x)
@@ -78,14 +58,14 @@ class Encoder(nn.Module):
 
 
 class EncoderLayer(nn.Module):
-    def __init__(self, d_model, ff_d_hidden):
+    def __init__(self, d_model: int, ff_d_hidden: int):
         super().__init__()
         self.multiHeadSublayer = MultiHeadSublayer(d_model=d_model)
         self.feedForwardSublayer = FeedForwardSublayer(
             d_model=d_model, d_hidden=ff_d_hidden
         )
 
-    def forward(self, input):
+    def forward(self, input: Tensor) -> Tensor:
         x = input
         x = self.multiHeadSublayer.forward(x)
         x = self.feedForwardSublayer.forward(x)
@@ -93,14 +73,14 @@ class EncoderLayer(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, d_model, n_layers, ff_d_hidden):
+    def __init__(self, d_model: int, n_layers: int, ff_d_hidden: int):
         super().__init__()
         self.layers = [
             DecoderLayer(d_model=d_model, ff_d_hidden=ff_d_hidden)
             for _ in range(n_layers)
         ]
 
-    def forward(self, input, encoder_output):
+    def forward(self, input: Tensor, encoder_output: Tensor) -> Tensor:
         x = input
         for layer in self.layers:
             x = layer.forward(x, encoder_output)
@@ -108,7 +88,7 @@ class Decoder(nn.Module):
 
 
 class DecoderLayer(nn.Module):
-    def __init__(self, d_model, ff_d_hidden):
+    def __init__(self, d_model: int, ff_d_hidden: int):
         super().__init__()
         self.maskedMultiHeadSublayer = MultiHeadSublayer(d_model=d_model, mask=None)
         self.multiHeadSublayer = MultiHeadSublayer(d_model=d_model)
@@ -116,7 +96,7 @@ class DecoderLayer(nn.Module):
             d_model=d_model, d_hidden=ff_d_hidden
         )
 
-    def forward(self, input, encoder_output):
+    def forward(self, input: Tensor, encoder_output: Tensor) -> Tensor:
         x = input
         x = self.maskedMultiHeadSublayer.forward(x)
         x = self.multiHeadSublayer.forward(
@@ -127,14 +107,19 @@ class DecoderLayer(nn.Module):
 
 
 class MultiHeadSublayer(nn.Module):
-    def __init__(self, d_model, mask=None):
+    def __init__(self, d_model: int, mask: Tensor | None = None):
         super().__init__()
         self.multiHeadAttention = MultiHeadAttention(
             n_heads=8, d_model=d_model, mask=mask
         )
         self.addAndNorm = AddAndNorm(d_model=d_model)
 
-    def forward(self, input, override_k=None, override_v=None):
+    def forward(
+        self,
+        input: Tensor,
+        override_k: Tensor | None = None,
+        override_v: Tensor | None = None,
+    ) -> Tensor:
         k = override_k or input
         v = override_v or input
         q = input
@@ -144,12 +129,12 @@ class MultiHeadSublayer(nn.Module):
 
 
 class FeedForwardSublayer(nn.Module):
-    def __init__(self, d_model, d_hidden):
+    def __init__(self, d_model: int, d_hidden: int):
         super().__init__()
         self.feedForward = FeedForward(d_model=d_model, d_hidden=d_hidden)
         self.addAndNorm = AddAndNorm(d_model=d_model)
 
-    def forward(self, input):
+    def forward(self, input: Tensor) -> Tensor:
         x = input
         x = self.feedForward.forward(x)
         x = self.addAndNorm.forward(input, x)
@@ -157,68 +142,68 @@ class FeedForwardSublayer(nn.Module):
 
 
 class AddAndNorm(nn.Module):
-    def __init__(self, d_model, eps=1e-6):
+    def __init__(self, d_model: int, eps: float = 1e-6):
         super().__init__()
         self.norm = Norm(d_model=d_model, eps=eps)
 
-    def forward(self, input, sublayer_output):
+    def forward(self, input: Tensor, sublayer_output: Tensor) -> Tensor:
         # diverging from paper for better gradient flow
         # paper gives LayerNorm(x + Sublayer(x))
         return input + self.norm.forward(sublayer_output)
 
 
 class Norm(nn.Module):
-    def __init__(self, d_model, eps=1e-6):
+    def __init__(self, d_model: int, eps: float = 1e-6):
         super().__init__()
         self.gamma = nn.Parameter(torch.ones(d_model))
         self.beta = nn.Parameter(torch.zeros(d_model))
         self.eps = eps
 
-    def forward(self, input):
+    def forward(self, input: Tensor) -> Tensor:
         mean = torch.mean(input, dim=-1, keepdim=True)
         var = torch.var(input, dim=-1, keepdim=True)
         return self.gamma * (input - mean) / torch.sqrt(var + self.eps) + self.beta
 
 
 class FeedForward(nn.Module):
-    def __init__(self, d_model, d_hidden):
+    def __init__(self, d_model: int, d_hidden: int):
         super().__init__()
         self.w1 = nn.Parameter(torch.ones((d_model, d_hidden)))
         self.b1 = nn.Parameter(torch.zeros(d_hidden))
         self.w2 = nn.Parameter(torch.ones((d_hidden, d_model)))
         self.b2 = nn.Parameter(torch.zeros(d_model))
 
-    def forward(self, input):
+    def forward(self, input: Tensor) -> Tensor:
         ReLU = nn.ReLU()
         return ReLU(input @ self.w1 + self.b1) @ self.w2 + self.b2
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, n_heads, d_model, mask=None):
+    def __init__(self, n_heads: int, d_model: int, mask: Tensor | None = None):
         super().__init__()
         self.n_heads = n_heads
         assert d_model % n_heads == 0
         self.heads = [
-            SingleHeadAttention(d_in=d_model, d_out=d_model / n_heads, mask=mask)
+            SingleHeadAttention(d_in=d_model, d_out=d_model // n_heads, mask=mask)
             for _ in range(n_heads)
         ]
         self.out_linear = nn.Linear(d_model, d_model)
 
-    def forward(self, v, k, q):
+    def forward(self, v: Tensor, k: Tensor, q: Tensor) -> Tensor:
         outputs = [head.forward(v, k, q) for head in self.heads]
         x = torch.concat(outputs)
         return self.out_linear.forward(x)
 
 
 class SingleHeadAttention(nn.Module):
-    def __init__(self, d_in, d_out, mask=None):
+    def __init__(self, d_in: int, d_out: int, mask: Tensor | None = None):
         super().__init__()
         self.v_linear = nn.Linear(in_features=d_in, out_features=d_out)
         self.k_linear = nn.Linear(in_features=d_in, out_features=d_out)
         self.q_linear = nn.Linear(in_features=d_in, out_features=d_out)
         self.mask = mask
 
-    def forward(self, v, k, q):
+    def forward(self, v: Tensor, k: Tensor, q: Tensor) -> Tensor:
         l_v = self.v_linear.forward(v)
         l_k = self.k_linear.forward(k)
         l_q = self.q_linear.forward(q)
