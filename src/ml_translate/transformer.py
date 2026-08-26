@@ -2,28 +2,27 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 
+from ml_translate.encoder_decoder import EncoderDecoder
+
 
 class Transformer(nn.Module):
-    def __init__(self, training_text: str, d_model: int, d_seq: int, n_vocab: int):
+    def __init__(self, d_model: int, d_seq: int, n_vocab: int):
         super().__init__()
-        self.tokenizer = Tokenizer(training_text)
         self.positionalEncoder = PositionalEncoder(d_model, d_seq)
-        self.encoder_embed = nn.Embedding(n_vocab, d_model)
-        self.decoder_embed = nn.Embedding(n_vocab, d_model)
+        self.encoderDecoder = EncoderDecoder(
+            d_model=d_model, n_layers=6, ff_d_hidden=1000
+        )
+        self.encoder_embed = nn.Embedding(num_embeddings=n_vocab, embedding_dim=d_model)
+        self.decoder_embed = nn.Embedding(num_embeddings=n_vocab, embedding_dim=d_model)
 
+    def forward(self, encoder_input, decoder_input):
+        embedded_encoder_input = self.encoder_embed(encoder_input)
+        pe_encoder_input = self.positionalEncoder.forward(embedded_encoder_input)
 
-class Tokenizer:
-    def __init__(self, text: str):
-        chars = sorted(set(text))
+        embedded_decoder_input = self.decoder_embed(decoder_input)
+        pe_decoder_input = self.positionalEncoder(embedded_decoder_input)
 
-        self.stoi = {ch: i for i, ch in enumerate(chars)}
-        self.itos = {i: ch for ch, i in self.stoi.items()}
-
-    def encode(self, text: str):
-        return [self.stoi[ch] for ch in text]
-
-    def decode(self, tokens):
-        return "".join(self.itos[i] for i in tokens)
+        return self.encoderDecoder.forward(pe_encoder_input, pe_decoder_input)
 
 
 class PositionalEncoder(nn.Module):

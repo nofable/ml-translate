@@ -36,7 +36,7 @@ class EncoderDecoder(nn.Module):
 
     # TODO: for each input, we will actually want to train against a parallel set of masked target_input
     # eg. hello friend -> _ _ _ _, _ bonjour _ _, _ bonjour mon _, _ bonjour mon ami
-    def transform(self, src_input: Tensor, target_input) -> Tensor:
+    def forward(self, src_input: Tensor, target_input) -> Tensor:
         encoder_output = self.encode(src_input)
         decoder_output = self.decode(target_input, encoder_output)
         return decoder_output
@@ -120,8 +120,8 @@ class MultiHeadSublayer(nn.Module):
         override_k: Tensor | None = None,
         override_v: Tensor | None = None,
     ) -> Tensor:
-        k = override_k or input
-        v = override_v or input
+        k = override_k if override_k is not None else input
+        v = override_v if override_v is not None else input
         q = input
         x = self.multiHeadAttention.forward(v, k, q)
         x = self.addAndNorm.forward(input, x)
@@ -191,7 +191,7 @@ class MultiHeadAttention(nn.Module):
 
     def forward(self, v: Tensor, k: Tensor, q: Tensor) -> Tensor:
         outputs = [head.forward(v, k, q) for head in self.heads]
-        x = torch.concat(outputs)
+        x = torch.concat(outputs, dim=-1)
         return self.out_linear.forward(x)
 
 
