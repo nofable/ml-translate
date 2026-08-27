@@ -10,10 +10,12 @@ class Transformer(nn.Module):
         super().__init__()
         self.positionalEncoder = PositionalEncoder(d_model, d_seq)
         self.encoderDecoder = EncoderDecoder(
-            d_model=d_model, n_layers=6, ff_d_hidden=1000
+            d_model=d_model, n_seq=d_seq, n_layers=6, ff_d_hidden=1000
         )
         self.encoder_embed = nn.Embedding(num_embeddings=n_vocab, embedding_dim=d_model)
         self.decoder_embed = nn.Embedding(num_embeddings=n_vocab, embedding_dim=d_model)
+        self.output_linear = nn.Linear(in_features=d_model, out_features=n_vocab)
+        self.softmax = nn.Softmax(dim=-1)
 
     def forward(self, encoder_input, decoder_input):
         embedded_encoder_input = self.encoder_embed(encoder_input)
@@ -22,7 +24,12 @@ class Transformer(nn.Module):
         embedded_decoder_input = self.decoder_embed(decoder_input)
         pe_decoder_input = self.positionalEncoder(embedded_decoder_input)
 
-        return self.encoderDecoder.forward(pe_encoder_input, pe_decoder_input)
+        decoder_output = self.encoderDecoder.forward(pe_encoder_input, pe_decoder_input)
+        linear_output = self.output_linear.forward(decoder_output)
+
+        output_probs = self.softmax(linear_output)
+        vocab = torch.argmax(output_probs, dim=-1)
+        return vocab
 
 
 class PositionalEncoder(nn.Module):
