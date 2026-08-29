@@ -2,28 +2,17 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 
-
-def scaled_dot_product_attention(
-    q: Tensor, k: Tensor, v: Tensor, mask: Tensor | None = None
-) -> Tensor:
-    d_k = k.size(dim=-1)
-    inter = q @ k.T
-    inter = inter / torch.sqrt(torch.tensor([d_k]))
-    if mask is not None:
-        inter = torch.where(mask == 0, -torch.inf, inter)
-    softmax = nn.Softmax(dim=-1)
-    inter = softmax(inter)
-    return inter @ v
+from ml_translate.attention import scaled_dot_product_attention
 
 
 class EncoderDecoder(nn.Module):
-    def __init__(self, d_model, n_seq, n_layers, ff_d_hidden):
+    def __init__(self, d_model, seq_len, n_layers, ff_d_hidden):
         super().__init__()
         self.encoder = Encoder(
-            d_model=d_model, n_seq=n_seq, n_layers=n_layers, ff_d_hidden=ff_d_hidden
+            d_model=d_model, seq_len=seq_len, n_layers=n_layers, ff_d_hidden=ff_d_hidden
         )
         self.decoder = Decoder(
-            d_model=d_model, n_seq=n_seq, n_layers=n_layers, ff_d_hidden=ff_d_hidden
+            d_model=d_model, seq_len=seq_len, n_layers=n_layers, ff_d_hidden=ff_d_hidden
         )
 
     def encode(self, input: Tensor) -> Tensor:
@@ -41,10 +30,10 @@ class EncoderDecoder(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, d_model: int, n_seq: int, n_layers: int, ff_d_hidden: int):
+    def __init__(self, d_model: int, seq_len: int, n_layers: int, ff_d_hidden: int):
         super().__init__()
         self.layers = [
-            EncoderLayer(d_model=d_model, n_seq=n_seq, ff_d_hidden=ff_d_hidden)
+            EncoderLayer(d_model=d_model, seq_len=seq_len, ff_d_hidden=ff_d_hidden)
             for _ in range(n_layers)
         ]
 
@@ -56,9 +45,9 @@ class Encoder(nn.Module):
 
 
 class EncoderLayer(nn.Module):
-    def __init__(self, d_model: int, n_seq: int, ff_d_hidden: int):
+    def __init__(self, d_model: int, seq_len: int, ff_d_hidden: int):
         super().__init__()
-        self.multiHeadSublayer = MultiHeadSublayer(d_model=d_model, n_seq=n_seq)
+        self.multiHeadSublayer = MultiHeadSublayer(d_model=d_model, seq_len=seq_len)
         self.feedForwardSublayer = FeedForwardSublayer(
             d_model=d_model, d_hidden=ff_d_hidden
         )
@@ -71,10 +60,10 @@ class EncoderLayer(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, d_model: int, n_seq: int, n_layers: int, ff_d_hidden: int):
+    def __init__(self, d_model: int, seq_len: int, n_layers: int, ff_d_hidden: int):
         super().__init__()
         self.layers = [
-            DecoderLayer(d_model=d_model, n_seq=n_seq, ff_d_hidden=ff_d_hidden)
+            DecoderLayer(d_model=d_model, seq_len=seq_len, ff_d_hidden=ff_d_hidden)
             for _ in range(n_layers)
         ]
 
@@ -86,13 +75,13 @@ class Decoder(nn.Module):
 
 
 class DecoderLayer(nn.Module):
-    def __init__(self, d_model: int, n_seq: int, ff_d_hidden: int):
+    def __init__(self, d_model: int, seq_len: int, ff_d_hidden: int):
         super().__init__()
 
         self.maskedMultiHeadSublayer = MultiHeadSublayer(
-            d_model=d_model, n_seq=n_seq, mask=True
+            d_model=d_model, seq_len=seq_len, mask=True
         )
-        self.multiHeadSublayer = MultiHeadSublayer(d_model=d_model, n_seq=n_seq)
+        self.multiHeadSublayer = MultiHeadSublayer(d_model=d_model, seq_len=seq_len)
         self.feedForwardSublayer = FeedForwardSublayer(
             d_model=d_model, d_hidden=ff_d_hidden
         )
@@ -108,10 +97,10 @@ class DecoderLayer(nn.Module):
 
 
 class MultiHeadSublayer(nn.Module):
-    def __init__(self, d_model: int, n_seq: int, mask: bool = False):
+    def __init__(self, d_model: int, seq_len: int, mask: bool = False):
         super().__init__()
         self.multiHeadAttention = MultiHeadAttention(
-            n_heads=8, d_model=d_model, n_seq=n_seq, mask=mask
+            n_heads=8, d_model=d_model, seq_len=seq_len, mask=mask
         )
         self.addAndNorm = AddAndNorm(d_model=d_model)
 
@@ -180,13 +169,13 @@ class FeedForward(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, n_heads: int, d_model: int, n_seq: int, mask: bool = False):
+    def __init__(self, n_heads: int, d_model: int, seq_len: int, mask: bool = False):
         super().__init__()
         self.n_heads = n_heads
         assert d_model % n_heads == 0
         self.heads = [
             SingleHeadAttention(
-                d_in=d_model, d_out=d_model // n_heads, n_seq=n_seq, mask=mask
+                d_in=d_model, d_out=d_model // n_heads, seq_len=seq_len, mask=mask
             )
             for _ in range(n_heads)
         ]
@@ -199,14 +188,14 @@ class MultiHeadAttention(nn.Module):
 
 
 class SingleHeadAttention(nn.Module):
-    def __init__(self, d_in: int, d_out: int, n_seq: int, mask: bool = False):
+    def __init__(self, d_in: int, d_out: int, seq_len: int, mask: bool = False):
         super().__init__()
         self.v_linear = nn.Linear(in_features=d_in, out_features=d_out)
         self.k_linear = nn.Linear(in_features=d_in, out_features=d_out)
         self.q_linear = nn.Linear(in_features=d_in, out_features=d_out)
         self.mask = None
         if mask:
-            ones = torch.ones((n_seq, n_seq))
+            ones = torch.ones((seq_len, seq_len))
             self.mask = torch.triu(ones, diagonal=1)
 
     def forward(self, v: Tensor, k: Tensor, q: Tensor) -> Tensor:
