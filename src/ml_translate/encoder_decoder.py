@@ -6,13 +6,21 @@ from ml_translate.attention import scaled_dot_product_attention
 
 
 class EncoderDecoder(nn.Module):
-    def __init__(self, d_model, seq_len, n_layers, ff_d_hidden):
+    def __init__(self, d_model, seq_len, n_layers, ff_d_hidden, p_dropout):
         super().__init__()
         self.encoder = Encoder(
-            d_model=d_model, seq_len=seq_len, n_layers=n_layers, ff_d_hidden=ff_d_hidden
+            d_model=d_model,
+            seq_len=seq_len,
+            n_layers=n_layers,
+            ff_d_hidden=ff_d_hidden,
+            p_dropout=p_dropout,
         )
         self.decoder = Decoder(
-            d_model=d_model, seq_len=seq_len, n_layers=n_layers, ff_d_hidden=ff_d_hidden
+            d_model=d_model,
+            seq_len=seq_len,
+            n_layers=n_layers,
+            ff_d_hidden=ff_d_hidden,
+            p_dropout=p_dropout,
         )
 
     def encode(self, input: Tensor) -> Tensor:
@@ -30,10 +38,22 @@ class EncoderDecoder(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, d_model: int, seq_len: int, n_layers: int, ff_d_hidden: int):
+    def __init__(
+        self,
+        d_model: int,
+        seq_len: int,
+        n_layers: int,
+        ff_d_hidden: int,
+        p_dropout: float,
+    ):
         super().__init__()
         self.layers = [
-            EncoderLayer(d_model=d_model, seq_len=seq_len, ff_d_hidden=ff_d_hidden)
+            EncoderLayer(
+                d_model=d_model,
+                seq_len=seq_len,
+                ff_d_hidden=ff_d_hidden,
+                p_dropout=p_dropout,
+            )
             for _ in range(n_layers)
         ]
 
@@ -45,11 +65,13 @@ class Encoder(nn.Module):
 
 
 class EncoderLayer(nn.Module):
-    def __init__(self, d_model: int, seq_len: int, ff_d_hidden: int):
+    def __init__(self, d_model: int, seq_len: int, ff_d_hidden: int, p_dropout: float):
         super().__init__()
-        self.multiHeadSublayer = MultiHeadSublayer(d_model=d_model, seq_len=seq_len)
+        self.multiHeadSublayer = MultiHeadSublayer(
+            d_model=d_model, seq_len=seq_len, p_dropout=p_dropout
+        )
         self.feedForwardSublayer = FeedForwardSublayer(
-            d_model=d_model, d_hidden=ff_d_hidden
+            d_model=d_model, d_hidden=ff_d_hidden, p_dropout=p_dropout
         )
 
     def forward(self, input: Tensor) -> Tensor:
@@ -60,10 +82,22 @@ class EncoderLayer(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, d_model: int, seq_len: int, n_layers: int, ff_d_hidden: int):
+    def __init__(
+        self,
+        d_model: int,
+        seq_len: int,
+        n_layers: int,
+        ff_d_hidden: int,
+        p_dropout: float,
+    ):
         super().__init__()
         self.layers = [
-            DecoderLayer(d_model=d_model, seq_len=seq_len, ff_d_hidden=ff_d_hidden)
+            DecoderLayer(
+                d_model=d_model,
+                seq_len=seq_len,
+                ff_d_hidden=ff_d_hidden,
+                p_dropout=p_dropout,
+            )
             for _ in range(n_layers)
         ]
 
@@ -75,15 +109,17 @@ class Decoder(nn.Module):
 
 
 class DecoderLayer(nn.Module):
-    def __init__(self, d_model: int, seq_len: int, ff_d_hidden: int):
+    def __init__(self, d_model: int, seq_len: int, ff_d_hidden: int, p_dropout: float):
         super().__init__()
 
         self.maskedMultiHeadSublayer = MultiHeadSublayer(
-            d_model=d_model, seq_len=seq_len, mask=True
+            d_model=d_model, seq_len=seq_len, p_dropout=p_dropout, mask=True
         )
-        self.multiHeadSublayer = MultiHeadSublayer(d_model=d_model, seq_len=seq_len)
+        self.multiHeadSublayer = MultiHeadSublayer(
+            d_model=d_model, seq_len=seq_len, p_dropout=p_dropout
+        )
         self.feedForwardSublayer = FeedForwardSublayer(
-            d_model=d_model, d_hidden=ff_d_hidden
+            d_model=d_model, d_hidden=ff_d_hidden, p_dropout=p_dropout
         )
 
     def forward(self, input: Tensor, encoder_output: Tensor) -> Tensor:
@@ -97,8 +133,11 @@ class DecoderLayer(nn.Module):
 
 
 class MultiHeadSublayer(nn.Module):
-    def __init__(self, d_model: int, seq_len: int, mask: bool = False):
+    def __init__(
+        self, d_model: int, seq_len: int, p_dropout: float, mask: bool = False
+    ):
         super().__init__()
+        self.p_dropout = p_dropout
         self.multiHeadAttention = MultiHeadAttention(
             n_heads=8, d_model=d_model, seq_len=seq_len, mask=mask
         )
@@ -114,27 +153,32 @@ class MultiHeadSublayer(nn.Module):
         v = override_v if override_v is not None else input
         q = input
         x = self.multiHeadAttention.forward(v, k, q)
+        dropout = nn.Dropout(p=self.p_dropout)
+        x = dropout(x)
         x = self.addAndNorm.forward(input, x)
         return x
 
 
 class FeedForwardSublayer(nn.Module):
-    def __init__(self, d_model: int, d_hidden: int):
+    def __init__(self, d_model: int, d_hidden: int, p_dropout: float):
         super().__init__()
+        self.p_dropout = p_dropout
         self.feedForward = FeedForward(d_model=d_model, d_hidden=d_hidden)
         self.addAndNorm = AddAndNorm(d_model=d_model)
 
     def forward(self, input: Tensor) -> Tensor:
         x = input
         x = self.feedForward.forward(x)
+        dropout = nn.Dropout(p=self.p_dropout)
+        x = dropout(x)
         x = self.addAndNorm.forward(input, x)
         return x
 
 
 class AddAndNorm(nn.Module):
-    def __init__(self, d_model: int, eps: float = 1e-6):
+    def __init__(self, d_model: int):
         super().__init__()
-        self.norm = Norm(d_model=d_model, eps=eps)
+        self.norm = Norm(d_model=d_model)
 
     def forward(self, input: Tensor, sublayer_output: Tensor) -> Tensor:
         # diverging from paper for better gradient flow

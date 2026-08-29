@@ -3,8 +3,9 @@ from torch import nn, Tensor
 
 
 class PositionalEncoder(nn.Module):
-    def __init__(self, d_model: int, d_seq: int):
+    def __init__(self, d_model: int, d_seq: int, p_dropout: float = 0):
         super().__init__()
+        self.p_dropout = p_dropout
         positions = torch.arange(d_seq).unsqueeze(1)
         encodings = torch.zeros(d_seq, d_model)
         div_term = torch.exp(
@@ -16,4 +17,5 @@ class PositionalEncoder(nn.Module):
         self.register_buffer("encodings", encodings)
 
     def forward(self, input: Tensor) -> Tensor:
-        return input + self.encodings
+        dropout = nn.Dropout(p=self.p_dropout)
+        return dropout(input + self.encodings)

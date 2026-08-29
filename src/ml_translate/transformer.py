@@ -14,13 +14,18 @@ class Transformer(nn.Module):
         num_embeddings: int,
         n_layers: int,
         ff_d_hidden: int,
+        p_dropout: float,
     ):
         super().__init__()
 
         self.d_model = d_model
         self.positionalEncoder = PositionalEncoder(d_model, seq_len)
         self.encoderDecoder = EncoderDecoder(
-            d_model=d_model, seq_len=seq_len, n_layers=n_layers, ff_d_hidden=ff_d_hidden
+            d_model=d_model,
+            seq_len=seq_len,
+            n_layers=n_layers,
+            ff_d_hidden=ff_d_hidden,
+            p_dropout=p_dropout,
         )
         self.embedding = nn.Embedding(
             num_embeddings=num_embeddings, embedding_dim=d_model

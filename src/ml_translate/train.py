@@ -8,7 +8,12 @@ with open("data/eng-fra.txt") as file:
 
     tokenizer = CharacterTokenizer(seq_len=seq_len)
     model = Transformer(
-        d_model=512, seq_len=seq_len, num_embeddings=100, n_layers=6, ff_d_hidden=2048
+        d_model=512,
+        seq_len=seq_len,
+        num_embeddings=100,
+        n_layers=6,
+        ff_d_hidden=2048,
+        p_dropout=0.1,
     )
 
     count = 0

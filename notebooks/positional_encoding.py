@@ -5,7 +5,7 @@
 import torch
 import pandas as pd
 import altair as alt
-from ml_translate.model import PositionalEncoder
+from ml_translate.positional_encoding import PositionalEncoder
 
 pe = PositionalEncoder(20, 100)
 output = pe.forward(torch.zeros(size=(100, 20)))
