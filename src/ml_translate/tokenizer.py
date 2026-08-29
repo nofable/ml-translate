@@ -18,7 +18,7 @@ class CharacterTokenizer:
                 self.ctoi[ch] = index
                 self.itoc[index] = ch
 
-    def encode(self, text: str, right_shift: bool = False) -> Tensor:
+    def encode(self, text: str, right_shift: bool = False) -> tuple[Tensor, Tensor]:
         proper = [self.ctoi[ch] for ch in text]
         t: Tensor
         if right_shift:
@@ -26,7 +26,9 @@ class CharacterTokenizer:
         else:
             t = torch.tensor(proper + [2])
 
-        return torch.nn.functional.pad(t, (0, self.seq_len - t.size(0)))
+        padded = torch.nn.functional.pad(t, (0, self.seq_len - t.size(0)))
+        pad_mask = torch.where(padded == 0, -torch.inf, padded)
+        return padded, pad_mask
 
     def decode(self, tokens: Tensor) -> str:
         result = ""

@@ -1,3 +1,4 @@
+import torch
 import re
 from ml_translate.transformer import Transformer
 from ml_translate.tokenizer import CharacterTokenizer
@@ -15,6 +16,8 @@ with open("data/eng-fra.txt") as file:
         ff_d_hidden=2048,
         p_dropout=0.1,
     )
+    loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
+    optim = torch.optim.AdamW(model.parameters(), lr=0.5, betas=(0.9, 0.98))
 
     count = 0
     max_lines = 10
@@ -33,10 +36,23 @@ with open("data/eng-fra.txt") as file:
         tokenizer.ingest(parts[1])
 
         # encode the inputs and outputs
-        inputs = tokenizer.encode(parts[0])
-        expected_result = tokenizer.encode(parts[1])
-        outputs = tokenizer.encode(parts[1], right_shift=True)
-        result = model.forward(inputs, outputs)
+        inputs, inputs_pad_mask = tokenizer.encode(parts[0])
+        expected_result, _ = tokenizer.encode(parts[1])
+        outputs, outputs_pad_mask = tokenizer.encode(parts[1], right_shift=True)
+
+        model.train()
+        optim.zero_grad()
+
+        logits = model.forward(
+            inputs=inputs,
+            outputs=outputs,
+            inputs_pad_mask=inputs_pad_mask,
+            outputs_pad_mask=outputs_pad_mask,
+        )
+        pad_mask_logits = torch.where(outputs_pad_mask == 0, 0.0, logits)
+        loss = loss_fn(pad_mask_logits, expected_result.float())
+        loss.backward()
+        optim.step()
         print("expected_result", parts[1])
-        print("actual_result", tokenizer.decode(result))
+        print("actual_result", tokenizer.decode(logits))
         count += 1

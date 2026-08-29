@@ -23,17 +23,39 @@ class EncoderDecoder(nn.Module):
             p_dropout=p_dropout,
         )
 
-    def encode(self, input: Tensor) -> Tensor:
-        x = self.encoder.forward(input)
+    def encode(self, inputs: Tensor, inputs_pad_mask: Tensor) -> Tensor:
+        x = self.encoder.forward(inputs=inputs, inputs_pad_mask=inputs_pad_mask)
         return x
 
-    def decode(self, input: Tensor, encoder_output: Tensor) -> Tensor:
-        x = self.decoder.forward(input, encoder_output)
+    def decode(
+        self,
+        outputs: Tensor,
+        encoder_output: Tensor,
+        inputs_pad_mask: Tensor,
+        outputs_pad_mask: Tensor,
+    ) -> Tensor:
+        x = self.decoder.forward(
+            outputs=outputs,
+            encoder_output=encoder_output,
+            inputs_pad_mask=inputs_pad_mask,
+            outputs_pad_mask=outputs_pad_mask,
+        )
         return x
 
-    def forward(self, src_input: Tensor, target_input) -> Tensor:
-        encoder_output = self.encode(src_input)
-        decoder_output = self.decode(target_input, encoder_output)
+    def forward(
+        self,
+        inputs: Tensor,
+        outputs: Tensor,
+        inputs_pad_mask: Tensor,
+        outputs_pad_mask: Tensor,
+    ) -> Tensor:
+        encoder_output = self.encode(inputs=inputs, inputs_pad_mask=inputs_pad_mask)
+        decoder_output = self.decode(
+            outputs=outputs,
+            encoder_output=encoder_output,
+            inputs_pad_mask=inputs_pad_mask,
+            outputs_pad_mask=outputs_pad_mask,
+        )
         return decoder_output
 
 
@@ -57,10 +79,10 @@ class Encoder(nn.Module):
             for _ in range(n_layers)
         ]
 
-    def forward(self, input: Tensor) -> Tensor:
-        x = input
+    def forward(self, inputs: Tensor, inputs_pad_mask: Tensor) -> Tensor:
+        x = inputs
         for layer in self.layers:
-            x = layer.forward(x)
+            x = layer.forward(inputs=x, inputs_pad_mask=inputs_pad_mask)
         return x
 
 
@@ -74,9 +96,9 @@ class EncoderLayer(nn.Module):
             d_model=d_model, d_hidden=ff_d_hidden, p_dropout=p_dropout
         )
 
-    def forward(self, input: Tensor) -> Tensor:
-        x = input
-        x = self.multiHeadSublayer.forward(x)
+    def forward(self, inputs: Tensor, inputs_pad_mask: Tensor) -> Tensor:
+        x = inputs
+        x = self.multiHeadSublayer.forward(inputs=x, pad_mask=inputs_pad_mask)
         x = self.feedForwardSublayer.forward(x)
         return x
 
@@ -101,10 +123,21 @@ class Decoder(nn.Module):
             for _ in range(n_layers)
         ]
 
-    def forward(self, input: Tensor, encoder_output: Tensor) -> Tensor:
-        x = input
+    def forward(
+        self,
+        outputs: Tensor,
+        encoder_output: Tensor,
+        inputs_pad_mask: Tensor,
+        outputs_pad_mask: Tensor,
+    ) -> Tensor:
+        x = outputs
         for layer in self.layers:
-            x = layer.forward(x, encoder_output)
+            x = layer.forward(
+                outputs=x,
+                encoder_output=encoder_output,
+                inputs_pad_mask=inputs_pad_mask,
+                outputs_pad_mask=outputs_pad_mask,
+            )
         return x
 
 
@@ -122,11 +155,21 @@ class DecoderLayer(nn.Module):
             d_model=d_model, d_hidden=ff_d_hidden, p_dropout=p_dropout
         )
 
-    def forward(self, input: Tensor, encoder_output: Tensor) -> Tensor:
-        x = input
-        x = self.maskedMultiHeadSublayer.forward(x)
+    def forward(
+        self,
+        outputs: Tensor,
+        encoder_output: Tensor,
+        inputs_pad_mask: Tensor,
+        outputs_pad_mask: Tensor,
+    ) -> Tensor:
+        x = outputs
+        x = self.maskedMultiHeadSublayer.forward(inputs=x, pad_mask=outputs_pad_mask)
         x = self.multiHeadSublayer.forward(
-            x, override_k=encoder_output, override_v=encoder_output
+            inputs=x,
+            override_k=encoder_output,
+            override_v=encoder_output,
+            pad_mask=outputs_pad_mask,
+            override_pad_mask=inputs_pad_mask,
         )
         x = self.feedForwardSublayer.forward(x)
         return x
@@ -145,17 +188,24 @@ class MultiHeadSublayer(nn.Module):
 
     def forward(
         self,
-        input: Tensor,
+        inputs: Tensor,
+        pad_mask: Tensor,
         override_k: Tensor | None = None,
         override_v: Tensor | None = None,
+        override_pad_mask: Tensor | None = None,
     ) -> Tensor:
-        k = override_k if override_k is not None else input
-        v = override_v if override_v is not None else input
-        q = input
-        x = self.multiHeadAttention.forward(v, k, q)
+        k = override_k if override_k is not None else inputs
+        v = override_v if override_v is not None else inputs
+        q = inputs
+
+        final_pad_mask = (
+            pad_mask & override_pad_mask if override_pad_mask is not None else pad_mask
+        )
+
+        x = self.multiHeadAttention.forward(v, k, q, pad_mask=final_pad_mask)
         dropout = nn.Dropout(p=self.p_dropout)
         x = dropout(x)
-        x = self.addAndNorm.forward(input, x)
+        x = self.addAndNorm.forward(inputs, x)
         return x
 
 
@@ -225,8 +275,10 @@ class MultiHeadAttention(nn.Module):
         ]
         self.out_linear = nn.Linear(d_model, d_model)
 
-    def forward(self, v: Tensor, k: Tensor, q: Tensor) -> Tensor:
-        outputs = [head.forward(v, k, q) for head in self.heads]
+    def forward(self, v: Tensor, k: Tensor, q: Tensor, pad_mask: Tensor) -> Tensor:
+        outputs = [
+            head.forward(v=v, k=k, q=q, pad_mask=pad_mask) for head in self.heads
+        ]
         x = torch.concat(outputs, dim=-1)
         return self.out_linear.forward(x)
 
@@ -237,13 +289,15 @@ class SingleHeadAttention(nn.Module):
         self.v_linear = nn.Linear(in_features=d_in, out_features=d_out)
         self.k_linear = nn.Linear(in_features=d_in, out_features=d_out)
         self.q_linear = nn.Linear(in_features=d_in, out_features=d_out)
-        self.mask = None
+        self.causal_mask = None
         if mask:
             ones = torch.ones((seq_len, seq_len))
-            self.mask = torch.triu(ones, diagonal=1)
+            self.causal_mask = torch.triu(ones, diagonal=1)
 
-    def forward(self, v: Tensor, k: Tensor, q: Tensor) -> Tensor:
+    def forward(self, v: Tensor, k: Tensor, q: Tensor, pad_mask: Tensor) -> Tensor:
         l_v = self.v_linear.forward(v)
         l_k = self.k_linear.forward(k)
         l_q = self.q_linear.forward(q)
-        return scaled_dot_product_attention(l_q, l_k, l_v, self.mask)
+        return scaled_dot_product_attention(
+            q=l_q, k=l_k, v=l_v, causal_mask=self.causal_mask, pad_mask=pad_mask
+        )

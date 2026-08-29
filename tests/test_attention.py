@@ -65,10 +65,10 @@ class TestScaledDotProductAttention:
         output = scaled_dot_product_attention(q, k, v)
         torch.testing.assert_close(output, torch.tensor([[2.0, 2.0], [2.0, 2.0]]))
 
-    def test_mask(self):
+    def test_causal_mask(self):
         mask = torch.tril(torch.ones((2, 2)))
         q = torch.tensor([[0.0, 5.0], [5.0, 5.0]])
         k = torch.tensor([[0.0, 1.0], [1.0, 0.0]])
         v = torch.tensor([[1.0, 0.0], [0.0, 1.0]])
-        output = scaled_dot_product_attention(q, k, v, mask=mask)
+        output = scaled_dot_product_attention(q, k, v, causal_mask=mask)
         torch.testing.assert_close(output, torch.tensor([[1.0, 0.0], [0.5, 0.5]]))
