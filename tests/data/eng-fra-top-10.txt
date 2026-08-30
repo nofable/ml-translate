@@ -1,0 +1,12 @@
+Go.	Va !
+Run!	Cours !
+Run!	Courez !
+Wow!	Ça alors !
+Fire!	Au feu !
+Help!	À l'aide !
+Jump.	Saute.
+Stop!	Ça suffit !
+Stop!	Stop !
+Stop!	Arrête-toi !
+Wait!	Attends !
+Wait!	Attendez !

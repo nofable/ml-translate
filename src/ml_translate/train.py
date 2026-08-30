@@ -1,47 +1,45 @@
+from tokenizers import Tokenizer
 import torch
-import re
+from torch.utils.data import DataLoader
+
+from ml_translate.config import TOKENIZER_FILE, ENG_FRA_TEXT_FILE
+from ml_translate.dataset import TabSeparatedLineDelimTranslationPairsDataset
 from ml_translate.transformer import Transformer
-from ml_translate.tokenizer import CharacterTokenizer
+from ml_translate.collate import collate
 
 
-with open("data/eng-fra.txt") as file:
-    seq_len = 20
+seq_len = 20
+num_epochs = 10
 
-    tokenizer = CharacterTokenizer(seq_len=seq_len)
-    model = Transformer(
-        d_model=512,
-        seq_len=seq_len,
-        num_embeddings=100,
-        n_layers=6,
-        ff_d_hidden=2048,
-        p_dropout=0.1,
-    )
-    loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
-    optim = torch.optim.AdamW(model.parameters(), lr=0.5, betas=(0.9, 0.98))
+tokenizer = Tokenizer.from_file(TOKENIZER_FILE)
 
-    count = 0
-    max_lines = 10
+model = Transformer(
+    d_model=512,
+    seq_len=seq_len,
+    num_embeddings=100,
+    n_layers=6,
+    ff_d_hidden=2048,
+    p_dropout=0.1,
+)
 
-    for line in file:
-        if count >= max_lines:
-            break
-        clean_line = line.strip()
-        # Replaces NNBSP, which is used before punctuation in french
-        clean_line = re.sub(r"\u202f", "", clean_line)
-        parts = clean_line.split("\t", maxsplit=1)
-        assert len(parts) == 2
+loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
+optim = torch.optim.AdamW(model.parameters(), lr=0.5, betas=(0.9, 0.98))
 
-        # build out the token set
-        tokenizer.ingest(parts[0])
-        tokenizer.ingest(parts[1])
+train_dataset = TabSeparatedLineDelimTranslationPairsDataset(filepath=ENG_FRA_TEXT_FILE)
+train_dataloader = DataLoader(train_dataset, batch_size=10, shuffle=True)
+
+
+for epoch in range(num_epochs):
+    model.train()
+
+    for inputs, outputs in train_dataloader:
+        optim.zero_grad()
 
         # encode the inputs and outputs
-        inputs, inputs_pad_mask = tokenizer.encode(parts[0])
-        expected_result, _ = tokenizer.encode(parts[1])
-        outputs, outputs_pad_mask = tokenizer.encode(parts[1], right_shift=True)
 
-        model.train()
-        optim.zero_grad()
+        inputs, inputs_pad_mask = collate(inputs, tokenizer)
+        outputs, outputs_pad_mask = collate(outputs, tokenizer)
+        expected_result = outputs[:, :, :-1]
 
         logits = model.forward(
             inputs=inputs,
@@ -53,6 +51,13 @@ with open("data/eng-fra.txt") as file:
         loss = loss_fn(pad_mask_logits, expected_result.float())
         loss.backward()
         optim.step()
-        print("expected_result", parts[1])
-        print("actual_result", tokenizer.decode(logits))
-        count += 1
+
+    model.eval()
+    total_loss = 0
+    for inputs, outputs in test_dataloader:
+        logits = model(x)
+        loss = loss_fn(logits, y)
+        total_loss += loss.item()
+
+    avg_loss = total_loss / len(test_dataloader)
+    print(f"epoch {epoch}: {avg_loss:.4f}")

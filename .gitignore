@@ -11,3 +11,7 @@ wheels/
 
 # ipynb
 .ipynb_checkpoints
+
+# tokenizer
+generated/
+*.tokenizer.json

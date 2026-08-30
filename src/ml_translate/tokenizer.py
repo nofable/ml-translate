@@ -1,41 +1,24 @@
-import torch
-from torch import Tensor
+from tokenizers import Tokenizer, pre_tokenizers, decoders, processors, trainers
+from tokenizers.models import BPE
 
 
-class CharacterTokenizer:
-    def __init__(self, seq_len):
-        self.next_available_index: int = 3
-        self.ctoi = {"<PAD>": 0, "<BOS>": 1, "<EOS>": 2}
-        self.itoc = {0: "<PAD>", 1: "<BOS>", 2: "<EOS>"}
-        self.seq_len = seq_len
+class BytePairTokenizer:
+    def __init__(self):
+        self.bytePairTokenizer = Tokenizer(BPE())
+        # add space before first word to make it more like other words
+        self.bytePairTokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(
+            add_prefix_space=True
+        )
+        self.bytePairTokenizer.decoder = decoders.ByteLevel()
+        self.bytePairTokenizer.post_processor = processors.ByteLevel(trim_offsets=True)
 
-    def ingest(self, text: str):
-        chars = set(text)
-        for ch in chars:
-            if ch not in self.ctoi:
-                index = self.next_available_index
-                self.next_available_index += 1
-                self.ctoi[ch] = index
-                self.itoc[index] = ch
+        self.trainer = trainers.BpeTrainer(
+            vocab_size=10000,
+            min_frequency=2,  # how many times a byte pair needs to be seen before being considered as a token
+            initial_alphabet=pre_tokenizers.ByteLevel.alphabet(),
+            special_tokens=["[pad]", "[bos]", "[eos]"],
+        )
 
-    def encode(self, text: str, right_shift: bool = False) -> tuple[Tensor, Tensor]:
-        proper = [self.ctoi[ch] for ch in text]
-        t: Tensor
-        if right_shift:
-            t = torch.tensor([1] + proper + [2])
-        else:
-            t = torch.tensor(proper + [2])
-
-        padded = torch.nn.functional.pad(t, (0, self.seq_len - t.size(0)))
-        pad_mask = torch.where(padded == 0, -torch.inf, padded)
-        return padded, pad_mask
-
-    def decode(self, tokens: Tensor) -> str:
-        result = ""
-        for i in tokens:
-            key = int(i.item())
-            if key in self.itoc:
-                result += self.itoc[key]
-            else:
-                result += "<UNK>"
-        return result
+    def train(self, src_file: str, out_file: str):
+        self.bytePairTokenizer.train([src_file], trainer=self.trainer)
+        self.bytePairTokenizer.save(out_file, pretty=True)
