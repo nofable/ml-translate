@@ -24,6 +24,7 @@ class TestCollate:
             )
             dataloader = DataLoader(dataset, batch_size=2)
             x, _ = next(iter(dataloader))
-            output, mask = collate(x, tokenizer)
+            output, mask, causal = collate(x, tokenizer)
             assert output.shape == (2, 6)
             assert mask.shape == (2, 6)
+            assert causal.shape == (2, 6)

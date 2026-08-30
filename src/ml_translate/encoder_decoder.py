@@ -6,18 +6,16 @@ from ml_translate.attention import scaled_dot_product_attention
 
 
 class EncoderDecoder(nn.Module):
-    def __init__(self, d_model, seq_len, n_layers, ff_d_hidden, p_dropout):
+    def __init__(self, d_model, n_layers, ff_d_hidden, p_dropout):
         super().__init__()
         self.encoder = Encoder(
             d_model=d_model,
-            seq_len=seq_len,
             n_layers=n_layers,
             ff_d_hidden=ff_d_hidden,
             p_dropout=p_dropout,
         )
         self.decoder = Decoder(
             d_model=d_model,
-            seq_len=seq_len,
             n_layers=n_layers,
             ff_d_hidden=ff_d_hidden,
             p_dropout=p_dropout,
@@ -33,12 +31,14 @@ class EncoderDecoder(nn.Module):
         encoder_output: Tensor,
         inputs_pad_mask: Tensor,
         outputs_pad_mask: Tensor,
+        outputs_causal_mask: Tensor,
     ) -> Tensor:
         x = self.decoder.forward(
             outputs=outputs,
             encoder_output=encoder_output,
             inputs_pad_mask=inputs_pad_mask,
             outputs_pad_mask=outputs_pad_mask,
+            outputs_causal_mask=outputs_causal_mask,
         )
         return x
 
@@ -48,6 +48,7 @@ class EncoderDecoder(nn.Module):
         outputs: Tensor,
         inputs_pad_mask: Tensor,
         outputs_pad_mask: Tensor,
+        outputs_causal_mask: Tensor,
     ) -> Tensor:
         encoder_output = self.encode(inputs=inputs, inputs_pad_mask=inputs_pad_mask)
         decoder_output = self.decode(
@@ -55,6 +56,7 @@ class EncoderDecoder(nn.Module):
             encoder_output=encoder_output,
             inputs_pad_mask=inputs_pad_mask,
             outputs_pad_mask=outputs_pad_mask,
+            outputs_causal_mask=outputs_causal_mask,
         )
         return decoder_output
 
@@ -63,7 +65,6 @@ class Encoder(nn.Module):
     def __init__(
         self,
         d_model: int,
-        seq_len: int,
         n_layers: int,
         ff_d_hidden: int,
         p_dropout: float,
@@ -72,7 +73,6 @@ class Encoder(nn.Module):
         self.layers = [
             EncoderLayer(
                 d_model=d_model,
-                seq_len=seq_len,
                 ff_d_hidden=ff_d_hidden,
                 p_dropout=p_dropout,
             )
@@ -87,11 +87,9 @@ class Encoder(nn.Module):
 
 
 class EncoderLayer(nn.Module):
-    def __init__(self, d_model: int, seq_len: int, ff_d_hidden: int, p_dropout: float):
+    def __init__(self, d_model: int, ff_d_hidden: int, p_dropout: float):
         super().__init__()
-        self.multiHeadSublayer = MultiHeadSublayer(
-            d_model=d_model, seq_len=seq_len, p_dropout=p_dropout
-        )
+        self.multiHeadSublayer = MultiHeadSublayer(d_model=d_model, p_dropout=p_dropout)
         self.feedForwardSublayer = FeedForwardSublayer(
             d_model=d_model, d_hidden=ff_d_hidden, p_dropout=p_dropout
         )
@@ -107,7 +105,6 @@ class Decoder(nn.Module):
     def __init__(
         self,
         d_model: int,
-        seq_len: int,
         n_layers: int,
         ff_d_hidden: int,
         p_dropout: float,
@@ -116,7 +113,6 @@ class Decoder(nn.Module):
         self.layers = [
             DecoderLayer(
                 d_model=d_model,
-                seq_len=seq_len,
                 ff_d_hidden=ff_d_hidden,
                 p_dropout=p_dropout,
             )
@@ -129,6 +125,7 @@ class Decoder(nn.Module):
         encoder_output: Tensor,
         inputs_pad_mask: Tensor,
         outputs_pad_mask: Tensor,
+        outputs_causal_mask: Tensor,
     ) -> Tensor:
         x = outputs
         for layer in self.layers:
@@ -137,20 +134,19 @@ class Decoder(nn.Module):
                 encoder_output=encoder_output,
                 inputs_pad_mask=inputs_pad_mask,
                 outputs_pad_mask=outputs_pad_mask,
+                outputs_causal_mask=outputs_causal_mask,
             )
         return x
 
 
 class DecoderLayer(nn.Module):
-    def __init__(self, d_model: int, seq_len: int, ff_d_hidden: int, p_dropout: float):
+    def __init__(self, d_model: int, ff_d_hidden: int, p_dropout: float):
         super().__init__()
 
         self.maskedMultiHeadSublayer = MultiHeadSublayer(
-            d_model=d_model, seq_len=seq_len, p_dropout=p_dropout, mask=True
+            d_model=d_model, p_dropout=p_dropout
         )
-        self.multiHeadSublayer = MultiHeadSublayer(
-            d_model=d_model, seq_len=seq_len, p_dropout=p_dropout
-        )
+        self.multiHeadSublayer = MultiHeadSublayer(d_model=d_model, p_dropout=p_dropout)
         self.feedForwardSublayer = FeedForwardSublayer(
             d_model=d_model, d_hidden=ff_d_hidden, p_dropout=p_dropout
         )
@@ -161,6 +157,7 @@ class DecoderLayer(nn.Module):
         encoder_output: Tensor,
         inputs_pad_mask: Tensor,
         outputs_pad_mask: Tensor,
+        outputs_causal_mask: Tensor,
     ) -> Tensor:
         x = outputs
         x = self.maskedMultiHeadSublayer.forward(inputs=x, pad_mask=outputs_pad_mask)
@@ -170,20 +167,17 @@ class DecoderLayer(nn.Module):
             override_v=encoder_output,
             pad_mask=outputs_pad_mask,
             override_pad_mask=inputs_pad_mask,
+            causal_mask=outputs_causal_mask,
         )
         x = self.feedForwardSublayer.forward(x)
         return x
 
 
 class MultiHeadSublayer(nn.Module):
-    def __init__(
-        self, d_model: int, seq_len: int, p_dropout: float, mask: bool = False
-    ):
+    def __init__(self, d_model: int, p_dropout: float):
         super().__init__()
         self.p_dropout = p_dropout
-        self.multiHeadAttention = MultiHeadAttention(
-            n_heads=8, d_model=d_model, seq_len=seq_len, mask=mask
-        )
+        self.multiHeadAttention = MultiHeadAttention(n_heads=8, d_model=d_model)
         self.addAndNorm = AddAndNorm(d_model=d_model)
 
     def forward(
@@ -193,6 +187,7 @@ class MultiHeadSublayer(nn.Module):
         override_k: Tensor | None = None,
         override_v: Tensor | None = None,
         override_pad_mask: Tensor | None = None,
+        causal_mask: Tensor | None = None,
     ) -> Tensor:
         k = override_k if override_k is not None else inputs
         v = override_v if override_v is not None else inputs
@@ -202,7 +197,9 @@ class MultiHeadSublayer(nn.Module):
             pad_mask & override_pad_mask if override_pad_mask is not None else pad_mask
         )
 
-        x = self.multiHeadAttention.forward(v, k, q, pad_mask=final_pad_mask)
+        x = self.multiHeadAttention.forward(
+            v, k, q, pad_mask=final_pad_mask, causal_mask=causal_mask
+        )
         dropout = nn.Dropout(p=self.p_dropout)
         x = dropout(x)
         x = self.addAndNorm.forward(inputs, x)
@@ -263,41 +260,50 @@ class FeedForward(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, n_heads: int, d_model: int, seq_len: int, mask: bool = False):
+    def __init__(self, n_heads: int, d_model: int):
         super().__init__()
         self.n_heads = n_heads
         assert d_model % n_heads == 0
         self.heads = [
-            SingleHeadAttention(
-                d_in=d_model, d_out=d_model // n_heads, seq_len=seq_len, mask=mask
-            )
+            SingleHeadAttention(d_in=d_model, d_out=d_model // n_heads)
             for _ in range(n_heads)
         ]
         self.out_linear = nn.Linear(d_model, d_model)
 
-    def forward(self, v: Tensor, k: Tensor, q: Tensor, pad_mask: Tensor) -> Tensor:
+    def forward(
+        self,
+        v: Tensor,
+        k: Tensor,
+        q: Tensor,
+        pad_mask: Tensor,
+        causal_mask: Tensor | None = None,
+    ) -> Tensor:
         outputs = [
-            head.forward(v=v, k=k, q=q, pad_mask=pad_mask) for head in self.heads
+            head.forward(v=v, k=k, q=q, pad_mask=pad_mask, causal_mask=causal_mask)
+            for head in self.heads
         ]
         x = torch.concat(outputs, dim=-1)
         return self.out_linear.forward(x)
 
 
 class SingleHeadAttention(nn.Module):
-    def __init__(self, d_in: int, d_out: int, seq_len: int, mask: bool = False):
+    def __init__(self, d_in: int, d_out: int):
         super().__init__()
         self.v_linear = nn.Linear(in_features=d_in, out_features=d_out)
         self.k_linear = nn.Linear(in_features=d_in, out_features=d_out)
         self.q_linear = nn.Linear(in_features=d_in, out_features=d_out)
-        self.causal_mask = None
-        if mask:
-            ones = torch.ones((seq_len, seq_len))
-            self.causal_mask = torch.triu(ones, diagonal=1)
 
-    def forward(self, v: Tensor, k: Tensor, q: Tensor, pad_mask: Tensor) -> Tensor:
+    def forward(
+        self,
+        v: Tensor,
+        k: Tensor,
+        q: Tensor,
+        pad_mask: Tensor,
+        causal_mask: Tensor | None = None,
+    ) -> Tensor:
         l_v = self.v_linear.forward(v)
         l_k = self.k_linear.forward(k)
         l_q = self.q_linear.forward(q)
         return scaled_dot_product_attention(
-            q=l_q, k=l_k, v=l_v, causal_mask=self.causal_mask, pad_mask=pad_mask
+            q=l_q, k=l_k, v=l_v, causal_mask=causal_mask, pad_mask=pad_mask
         )

@@ -11,8 +11,8 @@ class Transformer(nn.Module):
     def __init__(
         self,
         d_model: int,
-        seq_len: int,
         num_embeddings: int,
+        max_seq_len: int,
         n_layers: int,
         ff_d_hidden: int,
         p_dropout: float,
@@ -20,10 +20,11 @@ class Transformer(nn.Module):
         super().__init__()
 
         self.d_model = d_model
-        self.positionalEncoder = PositionalEncoder(d_model, seq_len)
+        self.positionalEncoder = PositionalEncoder(
+            d_model=d_model, max_seq_len=max_seq_len
+        )
         self.encoderDecoder = EncoderDecoder(
             d_model=d_model,
-            seq_len=seq_len,
             n_layers=n_layers,
             ff_d_hidden=ff_d_hidden,
             p_dropout=p_dropout,
@@ -40,7 +41,9 @@ class Transformer(nn.Module):
         self.output_linear.weight = self.embedding.weight
         self.softmax = nn.Softmax(dim=-1)
 
-    def forward(self, inputs, outputs, inputs_pad_mask, outputs_pad_mask):
+    def forward(
+        self, inputs, outputs, inputs_pad_mask, outputs_pad_mask, outputs_causal_mask
+    ):
         # In the embedding layers we multiply those weights by sqrt of d_model
         x_inputs = self.embedding(inputs) * math.sqrt(self.d_model)
         x_inputs = self.positionalEncoder.forward(x_inputs)
@@ -54,6 +57,7 @@ class Transformer(nn.Module):
             x_outputs,
             inputs_pad_mask=inputs_pad_mask,
             outputs_pad_mask=outputs_pad_mask,
+            outputs_causal_mask=outputs_causal_mask,
         )
         posits = self.softmax(self.output_linear.forward(decoded))
         vocab_index = torch.argmax(posits, dim=-1)

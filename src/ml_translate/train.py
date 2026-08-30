@@ -22,8 +22,8 @@ tokenizer = Tokenizer.from_file(TOKENIZER_FILE)
 
 model = Transformer(
     d_model=512,
-    seq_len=seq_len,
-    num_embeddings=100,
+    max_seq_len=10_000,
+    num_embeddings=10_000,
     n_layers=6,
     ff_d_hidden=2048,
     p_dropout=0.1,
@@ -45,17 +45,19 @@ for epoch in range(num_epochs):
     for train_x, train_y in train_dataloader:
         optim.zero_grad()
 
-        inputs, inputs_pad_mask = collate(train_x, tokenizer)
-        outputs, outputs_pad_mask = collate(train_y, tokenizer)
+        inputs, inputs_pad_mask, _ = collate(train_x, tokenizer)
+        outputs, outputs_pad_mask, outputs_causal_mask = collate(train_y, tokenizer)
         expected_result = outputs[:, :-1]
         shifted_right_outputs = outputs[:, 1:]
         shifted_right_outputs_mask = outputs_pad_mask[:, 1:]
+        shifted_right_outputs_causal_mask = outputs_causal_mask[:, 1:]
 
         logits = model.forward(
             inputs=inputs,
             outputs=shifted_right_outputs,
             inputs_pad_mask=inputs_pad_mask,
             outputs_pad_mask=shifted_right_outputs_mask,
+            outputs_causal_mask=shifted_right_outputs_causal_mask,
         )
         pad_mask_logits = torch.where(outputs_pad_mask == 0, 0.0, logits)
         loss = loss_fn(pad_mask_logits, expected_result.float())
@@ -66,8 +68,8 @@ for epoch in range(num_epochs):
     total_loss = 0
 
     for test_x, test_y in test_dataloader:
-        inputs, inputs_pad_mask = collate(test_x, tokenizer)
-        outputs, outputs_pad_mask = collate(test_y, tokenizer)
+        inputs, inputs_pad_mask, _ = collate(test_x, tokenizer)
+        outputs, outputs_pad_mask, outputs_causal_mask = collate(test_y, tokenizer)
         expected_result = outputs[:, :, :-1]
         shifted_right_outputs = outputs[:, :, 1:]
         shifted_right_outputs_mask = outputs_pad_mask[:, :, 1:]
@@ -76,6 +78,7 @@ for epoch in range(num_epochs):
             outputs=shifted_right_outputs,
             inputs_pad_mask=inputs_pad_mask,
             outputs_pad_mask=shifted_right_outputs_mask,
+            outputs_causal_mask=outputs_causal_mask,
         )
         loss = loss_fn(logits, expected_result.float())
         total_loss += loss.item()
