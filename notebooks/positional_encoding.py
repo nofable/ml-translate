@@ -2,9 +2,10 @@
 # Positional Encoding
 
 # %%
-import torch
-import pandas as pd
 import altair as alt
+import pandas as pd
+import torch
+
 from ml_translate.positional_encoding import PositionalEncoder
 
 pe = PositionalEncoder(20, 100)

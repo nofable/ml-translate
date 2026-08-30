@@ -2,6 +2,7 @@ from tokenizers import Tokenizer
 import torch
 from torch import Tensor
 from torch.nn.utils.rnn import pad_sequence
+
 from ml_translate.config import BOS_TOKEN, EOS_TOKEN, PAD_TOKEN
 
 
