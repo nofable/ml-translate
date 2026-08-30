@@ -80,6 +80,7 @@ for epoch in range(num_epochs):
             outputs_pad_mask=shifted_right_outputs_mask,
             outputs_causal_mask=outputs_causal_mask,
         )
+        pad_mask_logits = torch.where(outputs_pad_mask == 0, 0.0, logits)
         loss = loss_fn(logits, expected_result.float())
         total_loss += loss.item()
 

@@ -39,17 +39,3 @@ uv run jupyter lab
 ```
 
 Then right click on the notebook and open with notebook to make the jupytext render correctly.
-
-## Classes from Annotated Transformer
-
-- Encoder
-- LayerNorm
-- SublayerConnection
-- EncoderLayer
-- Decoder
-- DecoderLayer
-- attention
-- MultiHeadAttention
-- PositionWiseFeedForward
-- Embeddings
-- PositionalEncoding

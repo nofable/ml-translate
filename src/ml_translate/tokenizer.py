@@ -1,4 +1,4 @@
-from tokenizers import Tokenizer, pre_tokenizers, decoders, processors, trainers
+from tokenizers import Tokenizer, decoders, pre_tokenizers, processors, trainers
 from tokenizers.models import BPE
 
 
