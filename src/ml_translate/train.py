@@ -1,11 +1,9 @@
-from pandas.io.common import file_exists
-from tokenizers import Tokenizer
 import torch
 from torch import Tensor
 from torch.nn import CrossEntropyLoss
 
 from ml_translate.collate import collate
-from ml_translate.config import ENG_FRA_TEXT_FILE, PAD_TOKEN, TOKENIZER_FILE
+from ml_translate.config import ENG_FRA_TEXT_FILE, PAD_TOKEN
 from ml_translate.data_loader import TranslateDataLoader
 from ml_translate.tokenizer import BytePairTokenizer
 from ml_translate.transformer import Transformer
@@ -13,11 +11,8 @@ from ml_translate.transformer import Transformer
 
 num_epochs = 2
 
-if not file_exists(TOKENIZER_FILE):
-    tokenizer = BytePairTokenizer()
-    tokenizer.train(src_file=ENG_FRA_TEXT_FILE, out_file=TOKENIZER_FILE)
-
-tokenizer = Tokenizer.from_file(TOKENIZER_FILE)
+bytePairTokenizer = BytePairTokenizer(src_file=ENG_FRA_TEXT_FILE)
+tokenizer = bytePairTokenizer.getTokenizer()
 
 model = Transformer(
     d_model=512,

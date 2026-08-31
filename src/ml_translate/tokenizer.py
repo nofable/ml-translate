@@ -1,9 +1,15 @@
+from pandas.io.common import file_exists
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors, trainers
 from tokenizers.models import BPE
 
+from ml_translate.config import TOKENIZER_FILE
+
 
 class BytePairTokenizer:
-    def __init__(self):
+    def __init__(self, src_file: str):
+        if file_exists(TOKENIZER_FILE):
+            return
+
         self.bytePairTokenizer = Tokenizer(BPE())
         # add space before first word to make it more like other words
         self.bytePairTokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(
@@ -19,6 +25,8 @@ class BytePairTokenizer:
             special_tokens=["[pad]", "[bos]", "[eos]"],
         )
 
-    def train(self, src_file: str, out_file: str):
         self.bytePairTokenizer.train([src_file], trainer=self.trainer)
-        self.bytePairTokenizer.save(out_file, pretty=True)
+        self.bytePairTokenizer.save(TOKENIZER_FILE, pretty=True)
+
+    def getTokenizer(self):
+        return Tokenizer.from_file(TOKENIZER_FILE)
