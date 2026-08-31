@@ -6,9 +6,7 @@ from torch.nn.utils.rnn import pad_sequence
 from ml_translate.config import BOS_TOKEN, EOS_TOKEN, PAD_TOKEN
 
 
-def collate(
-    batch: tuple[str, ...], tokenizer: Tokenizer
-) -> tuple[Tensor, Tensor, Tensor]:
+def collate(batch: tuple[str, ...], tokenizer: Tokenizer) -> tuple[Tensor, Tensor]:
     BOS_ID: int | None = tokenizer.token_to_id(BOS_TOKEN)
     EOS_ID: int | None = tokenizer.token_to_id(EOS_TOKEN)
     PAD_ID: int | None = tokenizer.token_to_id(PAD_TOKEN)
@@ -22,6 +20,4 @@ def collate(
     padded: Tensor = pad_sequence(tokens, batch_first=True, padding_value=float(PAD_ID))
     pad_mask: Tensor = torch.where(padded == float(PAD_ID), 0.0, 1.0)
 
-    ones = torch.ones(padded.shape)
-    causal_mask = torch.triu(ones, diagonal=1)
-    return padded, pad_mask, causal_mask
+    return padded, pad_mask
