@@ -1,13 +1,13 @@
 from torch.utils.data import DataLoader
 
-from ml_translate.dataset import TabSeparatedLineDelimTranslationPairsDataset
+from ml_translate.dataset import TranslateDataset
 
 TEST_DATA_ENG_FRA_FILE = "tests/data/eng-fra-top-10.txt"
 
 
 class TestDataLoader:
     def test_dataloader(self):
-        dataset = TabSeparatedLineDelimTranslationPairsDataset(
+        dataset = TranslateDataset(
             filepath=TEST_DATA_ENG_FRA_FILE
         )
         dataloader = DataLoader(dataset, batch_size=2)

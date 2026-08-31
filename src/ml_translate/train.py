@@ -1,12 +1,12 @@
 from pandas.io.common import file_exists
 from tokenizers import Tokenizer
 import torch
+from torch import Tensor
 from torch.nn import CrossEntropyLoss
-from torch.utils.data import DataLoader, random_split
 
 from ml_translate.collate import collate
 from ml_translate.config import ENG_FRA_TEXT_FILE, PAD_TOKEN, TOKENIZER_FILE
-from ml_translate.dataset import TabSeparatedLineDelimTranslationPairsDataset
+from ml_translate.data_loader import TranslateDataLoader
 from ml_translate.tokenizer import BytePairTokenizer
 from ml_translate.transformer import Transformer
 
@@ -30,16 +30,31 @@ model = Transformer(
 
 PAD_ID = tokenizer.token_to_id(PAD_TOKEN)
 assert PAD_ID is not None
+
 loss_fn: CrossEntropyLoss = torch.nn.CrossEntropyLoss(
     label_smoothing=0.1, ignore_index=PAD_ID
 )
+
 optim = torch.optim.AdamW(model.parameters(), lr=0.5, betas=(0.9, 0.98))
 
-full_dataset = TabSeparatedLineDelimTranslationPairsDataset(filepath=ENG_FRA_TEXT_FILE)
-g = torch.Generator().manual_seed(42)
-train_ds, test_ds = random_split(full_dataset, [0.8, 0.2], generator=g)
-train_dataloader = DataLoader(train_ds, batch_size=10, shuffle=True)
-test_dataloader = DataLoader(test_ds, batch_size=10)
+dataloader = TranslateDataLoader()
+train_dataloader, test_dataloader = dataloader.train_test_dataloaders()
+
+
+def run_batch(model, tokenizer, x, y) -> tuple[Tensor, Tensor]:
+    inputs, inputs_pad_mask = collate(x, tokenizer)
+    outputs, outputs_pad_mask = collate(y, tokenizer)
+    expected_result = outputs[:, 1:]
+    shifted_right_outputs = outputs[:, :-1]
+    shifted_right_outputs_mask = outputs_pad_mask[:, :-1]
+
+    logits = model.forward(
+        inputs=inputs,
+        outputs=shifted_right_outputs,
+        inputs_pad_mask=inputs_pad_mask,
+        outputs_pad_mask=shifted_right_outputs_mask,
+    )
+    return logits, expected_result
 
 
 for epoch in range(num_epochs):
@@ -47,19 +62,7 @@ for epoch in range(num_epochs):
 
     for train_x, train_y in train_dataloader:
         optim.zero_grad()
-
-        inputs, inputs_pad_mask = collate(train_x, tokenizer)
-        outputs, outputs_pad_mask = collate(train_y, tokenizer)
-        expected_result = outputs[:, 1:]
-        shifted_right_outputs = outputs[:, :-1]
-        shifted_right_outputs_mask = outputs_pad_mask[:, :-1]
-
-        logits = model.forward(
-            inputs=inputs,
-            outputs=shifted_right_outputs,
-            inputs_pad_mask=inputs_pad_mask,
-            outputs_pad_mask=shifted_right_outputs_mask,
-        )
+        logits, expected_result = run_batch(model, tokenizer, train_x, train_y)
         loss = loss_fn(
             logits.reshape(-1, logits.size(-1)),
             expected_result.reshape(-1),
@@ -71,17 +74,7 @@ for epoch in range(num_epochs):
     total_loss = 0
 
     for test_x, test_y in test_dataloader:
-        inputs, inputs_pad_mask = collate(test_x, tokenizer)
-        outputs, outputs_pad_mask = collate(test_y, tokenizer)
-        expected_result = outputs[:, 1:]
-        shifted_right_outputs = outputs[:, :-1]
-        shifted_right_outputs_mask = outputs_pad_mask[:, :-1]
-        logits = model.forward(
-            inputs=inputs,
-            outputs=shifted_right_outputs,
-            inputs_pad_mask=inputs_pad_mask,
-            outputs_pad_mask=shifted_right_outputs_mask,
-        )
+        logits, expected_result = run_batch(model, tokenizer, test_x, test_y)
         loss = loss_fn(
             logits.reshape(-1, logits.size(-1)),
             expected_result.reshape(-1),

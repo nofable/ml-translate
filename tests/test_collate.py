@@ -4,7 +4,7 @@ from tokenizers import Tokenizer
 from torch.utils.data import DataLoader
 
 from ml_translate.collate import collate
-from ml_translate.dataset import TabSeparatedLineDelimTranslationPairsDataset
+from ml_translate.dataset import TranslateDataset
 from ml_translate.tokenizer import BytePairTokenizer
 
 TEST_DATA_ENG_FRA_FILE = "tests/data/eng-fra-top-10.txt"
@@ -19,7 +19,7 @@ class TestCollate:
             )
 
             tokenizer = Tokenizer.from_file(tmp_file.name)
-            dataset = TabSeparatedLineDelimTranslationPairsDataset(
+            dataset = TranslateDataset(
                 filepath=TEST_DATA_ENG_FRA_FILE
             )
             dataloader = DataLoader(dataset, batch_size=2)

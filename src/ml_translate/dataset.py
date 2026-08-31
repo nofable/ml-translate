@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 cap_lines = 100
 
 
-class TabSeparatedLineDelimTranslationPairsDataset(Dataset):
+class TranslateDataset(Dataset):
     def __init__(self, filepath: str):
         self.data = []
         with open(filepath) as file:
