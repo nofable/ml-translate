@@ -41,7 +41,6 @@ class Transformer(nn.Module):
 
         # share weight matrix between the two enbedding layers and the pre-softmanx linear
         self.output_linear.weight = self.embedding.weight
-        self.softmax = nn.Softmax(dim=-1)
 
     def forward(self, inputs, outputs, inputs_pad_mask, outputs_pad_mask):
         # In the embedding layers we multiply those weights by sqrt of d_model
@@ -58,9 +57,7 @@ class Transformer(nn.Module):
             inputs_pad_mask=inputs_pad_mask,
             outputs_pad_mask=outputs_pad_mask,
         )
-        posits = self.softmax(self.output_linear.forward(decoded))
-        vocab_index = torch.argmax(posits, dim=-1)
-        return vocab_index
+        return self.output_linear.forward(decoded)
 
 
 class EncoderDecoder(nn.Module):

@@ -50,9 +50,9 @@ for epoch in range(num_epochs):
 
         inputs, inputs_pad_mask = collate(train_x, tokenizer)
         outputs, outputs_pad_mask = collate(train_y, tokenizer)
-        expected_result = outputs[:, :-1]
-        shifted_right_outputs = outputs[:, 1:]
-        shifted_right_outputs_mask = outputs_pad_mask[:, 1:]
+        expected_result = outputs[:, 1:]
+        shifted_right_outputs = outputs[:, :-1]
+        shifted_right_outputs_mask = outputs_pad_mask[:, :-1]
 
         logits = model.forward(
             inputs=inputs,
@@ -61,8 +61,8 @@ for epoch in range(num_epochs):
             outputs_pad_mask=shifted_right_outputs_mask,
         )
         loss = loss_fn(
-            logits,
-            expected_result.float(),
+            logits.reshape(-1, logits.size(-1)),
+            expected_result.reshape(-1),
         )
         loss.backward()
         optim.step()
@@ -73,9 +73,9 @@ for epoch in range(num_epochs):
     for test_x, test_y in test_dataloader:
         inputs, inputs_pad_mask = collate(test_x, tokenizer)
         outputs, outputs_pad_mask = collate(test_y, tokenizer)
-        expected_result = outputs[:, :, :-1]
-        shifted_right_outputs = outputs[:, :, 1:]
-        shifted_right_outputs_mask = outputs_pad_mask[:, :, 1:]
+        expected_result = outputs[:, 1:]
+        shifted_right_outputs = outputs[:, :-1]
+        shifted_right_outputs_mask = outputs_pad_mask[:, :-1]
         logits = model.forward(
             inputs=inputs,
             outputs=shifted_right_outputs,
@@ -83,8 +83,8 @@ for epoch in range(num_epochs):
             outputs_pad_mask=shifted_right_outputs_mask,
         )
         loss = loss_fn(
-            logits,
-            expected_result.float(),
+            logits.reshape(-1, logits.size(-1)),
+            expected_result.reshape(-1),
         )
         total_loss += loss.item()
 
