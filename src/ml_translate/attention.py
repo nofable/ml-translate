@@ -12,13 +12,13 @@ def scaled_dot_product_attention(
     d_k = k.size(dim=-1)
 
     inter = q @ k.mT
-    inter = inter / torch.sqrt(torch.tensor([d_k]))
+    inter = inter / d_k**0.5
 
     if causal_mask is not None:
-        inter = torch.where(causal_mask == 0, -torch.inf, inter)
+        inter = torch.where(causal_mask, -torch.inf, inter)
     if pad_mask is not None:
         reshaped = pad_mask.unsqueeze(-2)
-        inter = torch.where(reshaped == 0, -torch.inf, inter)
+        inter = torch.where(reshaped, -torch.inf, inter)
 
     softmax = nn.Softmax(dim=-1)
     inter = softmax(inter)

@@ -28,7 +28,11 @@ model = Transformer(
     p_dropout=0.1,
 )
 
-loss_fn: CrossEntropyLoss = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
+PAD_ID = tokenizer.token_to_id(PAD_TOKEN)
+assert PAD_ID is not None
+loss_fn: CrossEntropyLoss = torch.nn.CrossEntropyLoss(
+    label_smoothing=0.1, ignore_index=PAD_ID
+)
 optim = torch.optim.AdamW(model.parameters(), lr=0.5, betas=(0.9, 0.98))
 
 full_dataset = TabSeparatedLineDelimTranslationPairsDataset(filepath=ENG_FRA_TEXT_FILE)
@@ -56,8 +60,10 @@ for epoch in range(num_epochs):
             inputs_pad_mask=inputs_pad_mask,
             outputs_pad_mask=shifted_right_outputs_mask,
         )
-        pad_mask_logits = torch.where(outputs_pad_mask == 0, 0.0, logits)
-        loss = loss_fn(pad_mask_logits, expected_result.float())
+        loss = loss_fn(
+            logits,
+            expected_result.float(),
+        )
         loss.backward()
         optim.step()
 
@@ -79,7 +85,6 @@ for epoch in range(num_epochs):
         loss = loss_fn(
             logits,
             expected_result.float(),
-            ignore_index=tokenizer.token_to_id(PAD_TOKEN),
         )
         total_loss += loss.item()
 

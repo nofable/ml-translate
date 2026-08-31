@@ -18,6 +18,6 @@ def collate(batch: tuple[str, ...], tokenizer: Tokenizer) -> tuple[Tensor, Tenso
         for item in batch
     ]
     padded: Tensor = pad_sequence(tokens, batch_first=True, padding_value=float(PAD_ID))
-    pad_mask: Tensor = torch.where(padded == float(PAD_ID), 0.0, 1.0)
+    pad_mask: Tensor = torch.where(padded == float(PAD_ID), True, False)
 
     return padded, pad_mask
