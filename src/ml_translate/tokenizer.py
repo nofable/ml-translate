@@ -6,8 +6,9 @@ from ml_translate.config import TOKENIZER_FILE
 
 
 class BytePairTokenizer:
-    def __init__(self, src_file: str):
-        if file_exists(TOKENIZER_FILE):
+    def __init__(self, src_file: str, out_file: str = TOKENIZER_FILE):
+        self.out_file = out_file
+        if file_exists(self.out_file):
             return
 
         self.bytePairTokenizer = Tokenizer(BPE())
@@ -26,7 +27,7 @@ class BytePairTokenizer:
         )
 
         self.bytePairTokenizer.train([src_file], trainer=self.trainer)
-        self.bytePairTokenizer.save(TOKENIZER_FILE, pretty=True)
+        self.bytePairTokenizer.save(self.out_file, pretty=True)
 
     def getTokenizer(self):
-        return Tokenizer.from_file(TOKENIZER_FILE)
+        return Tokenizer.from_file(self.out_file)

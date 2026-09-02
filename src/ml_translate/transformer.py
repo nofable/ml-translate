@@ -2,7 +2,7 @@ import math
 
 import torch
 import torch.nn as nn
-from torch import Tensor
+from torch import Tensor, softmax
 
 from ml_translate.attention import scaled_dot_product_attention
 from ml_translate.positional_encoding import PositionalEncoder
@@ -57,7 +57,7 @@ class Transformer(nn.Module):
             inputs_pad_mask=inputs_pad_mask,
             outputs_pad_mask=outputs_pad_mask,
         )
-        return self.output_linear.forward(decoded)
+        return softmax(self.output_linear.forward(decoded), dim=-1)
 
 
 class EncoderDecoder(nn.Module):

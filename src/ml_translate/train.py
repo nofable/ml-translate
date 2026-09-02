@@ -1,6 +1,6 @@
 import torch
 from torch import Tensor
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, init
 
 from ml_translate.collate import collate
 from ml_translate.config import (
@@ -28,6 +28,10 @@ model = Transformer(
     ff_d_hidden=2048,
     p_dropout=0.1,
 )
+# copied from annotated transformer, which copied from original source code
+for p in model.parameters():
+    if p.dim() > 1:
+        init.xavier_uniform_(p)
 
 PAD_ID = tokenizer.token_to_id(PAD_TOKEN)
 assert PAD_ID is not None
@@ -71,6 +75,8 @@ for epoch in range(1, num_epochs + 1):
     for train_x, train_y in train_dataloader:
         optim.zero_grad()
 
+        # logits.shape = (Batch [B], Seq [S], Vocab [V]) eg. (10, 25, 30_000)
+        # expected_result.shape = (B, S) eg. (10, 25).
         logits, expected_result = run_batch(model, tokenizer, train_x, train_y)
         loss = loss_fn(
             logits.reshape(-1, logits.size(-1)),
