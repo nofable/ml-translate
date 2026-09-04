@@ -1,4 +1,3 @@
-from pandas.io.common import file_exists
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors, trainers
 from tokenizers.models import BPE
 
@@ -8,8 +7,6 @@ from ml_translate.config import TOKENIZER_FILE
 class BytePairTokenizer:
     def __init__(self, src_file: str, out_file: str = TOKENIZER_FILE):
         self.out_file = out_file
-        if file_exists(self.out_file):
-            return
 
         self.bytePairTokenizer = Tokenizer(BPE())
         # add space before first word to make it more like other words

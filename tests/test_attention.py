@@ -80,7 +80,7 @@ class TestScaledDotProductAttention:
         )
 
     def test_batch(self):
-        mask = torch.triu(torch.ones(10, 6, 6))
+        mask = torch.triu(torch.ones(6, 6, dtype=torch.bool), diagonal=1)
         q = torch.rand(size=(10, 6, 64))
         k = torch.rand(size=(10, 6, 64))
         v = torch.rand(size=(10, 6, 64))

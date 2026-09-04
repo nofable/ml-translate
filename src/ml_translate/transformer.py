@@ -2,7 +2,7 @@ import math
 
 import torch
 import torch.nn as nn
-from torch import Tensor, softmax
+from torch import Tensor
 
 from ml_translate.attention import scaled_dot_product_attention
 from ml_translate.positional_encoding import PositionalEncoder
@@ -42,7 +42,7 @@ class Transformer(nn.Module):
         # share weight matrix between the two enbedding layers and the pre-softmanx linear
         self.output_linear.weight = self.embedding.weight
 
-    def forward(self, inputs, outputs, inputs_pad_mask, outputs_pad_mask):
+    def forward(self, inputs, outputs, inputs_pad_mask, outputs_pad_mask) -> Tensor:
         # In the embedding layers we multiply those weights by sqrt of d_model
         x_inputs = self.embedding(inputs) * math.sqrt(self.d_model)
         x_inputs = self.positionalEncoder.forward(x_inputs)
@@ -57,7 +57,7 @@ class Transformer(nn.Module):
             inputs_pad_mask=inputs_pad_mask,
             outputs_pad_mask=outputs_pad_mask,
         )
-        return softmax(self.output_linear.forward(decoded), dim=-1)
+        return self.output_linear.forward(decoded)
 
 
 class EncoderDecoder(nn.Module):
